@@ -50,6 +50,8 @@ public class WaveUIController : MonoBehaviour
     private Dictionary<NeedType, NeedItemUI> activeNeedItems = new Dictionary<NeedType, NeedItemUI>();
     private HashSet<NeedType> unlockedNeeds = new HashSet<NeedType>();
     private bool isWaveInProgress = false;
+    public bool IsWaveInProgress => isWaveInProgress;
+    public event Action<bool> WaveStateChanged;
 
     private void Awake()
     {
@@ -91,6 +93,7 @@ public class WaveUIController : MonoBehaviour
 
     public void SetWaveState(bool inProgress)
     {
+        bool changed = isWaveInProgress != inProgress;
         isWaveInProgress = inProgress;
 
         // 1. Správanie tlačidla Start Wave
@@ -129,6 +132,7 @@ public class WaveUIController : MonoBehaviour
         {
             CloseSidePanel();
         }
+        if (changed) WaveStateChanged?.Invoke(inProgress);
     }
 
     // --- ODOMYKANIE / ZAMYKANIE POTRIEB ---
