@@ -15,5 +15,9 @@ public enum GameState
 
 public class GameData : MonoBehaviour
 {
-    public GameState game_state = GameState.UPGRADE;
+    // only GameStateManager writes the state; other systems read it.
+    [SerializeField, UnityEngine.Serialization.FormerlySerializedAs("game_state")]
+    private GameState currentState = GameState.AWAITING_WAVE;
+    public GameState game_state => currentState;
+    internal void SetState(GameState state) { currentState = state; }
 }
