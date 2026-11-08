@@ -42,6 +42,9 @@ public sealed class GuestVisualSpawner : MonoBehaviour
 
     private void Update()
     {
+        bool paused = waveController != null && waveController.IsWavePaused;
+        foreach (var existingGuest in guests) if (existingGuest != null) existingGuest.enabled = !paused;
+        if (paused) return;
         if (!active || guests.Count >= guestCount) return;
         spawnTimer -= Time.deltaTime;
         if (spawnTimer > 0) return;
