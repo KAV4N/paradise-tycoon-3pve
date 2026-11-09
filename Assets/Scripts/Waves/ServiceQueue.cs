@@ -37,7 +37,35 @@ public class ServiceQueue
     private double NextArrival => arrived < total ? arrivalSeconds * ((arrived + 1.0) / total) : double.PositiveInfinity;
     public void Tick(double seconds)
     {
-        //TODO: ticking
+        if (seconds < 0 || double.IsNaN(seconds) || double.IsInfinity(seconds) || double.IsInfinity(elapsed + seconds))
+            throw new ArgumentOutOfRangeException(nameof(seconds));
+        double target = elapsed + seconds;
+        while (elapsed < target)
+        {
+            double rate = multiplier / serviceSeconds;
+            double step = Math.Min(target - elapsed, Math.Max(0, NextArrival - elapsed));
+            for (int i = 0; i < seats.Length; i++)
+                if (seats[i] >= 0) step = Math.Min(step, Math.Max(0, (1 - seats[i]) / rate));
+            for (int i = 0; i < seats.Length; i++) if (seats[i] >= 0) seats[i] += step * rate;
+            elapsed += step;
+            for (int i = 0; i < seats.Length; i++)
+                if (seats[i] >= 1 - Epsilon) { seats[i] = -1; inService--; completed++; }
+            while (arrived < total && NextArrival <= elapsed + Epsilon)
+            {
+                waiting.Enqueue(NextArrival);
+                arrived++;
+            }
+            for (int i = 0; i < seats.Length && waiting.Count > 0; i++)
+                if (seats[i] < 0)
+                {
+                    double arrival = waiting.Dequeue();
+                    if (TrackWaitingTime) waits.Add(Math.Max(0, elapsed - arrival));
+                    seats[i] = 0; inService++;
+                }
+        }
     }
+    public NeedSnapshot Snapshot() => new NeedSnapshot(type, total, arrived, waiting.Count,
+        inService, completed, TrackWaitingTime && waiting.Count > 0 ? Math.Max(0, elapsed - waiting.Peek()) : 0,
+        waits.ToArray(), (double[])seats.Clone(), TrackWaitingTime);
 }
 
