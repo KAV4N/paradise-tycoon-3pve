@@ -25,5 +25,12 @@ public sealed class WaveModelComponent : MonoBehaviour
         new WaveEntry(42,25,28,22,20,10), new WaveEntry(52,31,35,28,25,16)
     };
     public int Count => waves == null ? 0 : waves.Length;
-
+    public WaveDefinition Get(int number)
+    {
+        if (number < 1 || number > Count || waves[number - 1] == null)
+            throw new ArgumentOutOfRangeException(nameof(number), "Configure this wave in the Wave Model scene component.");
+        var wave = waves[number - 1];
+        return new WaveDefinition(number, wave.customers, arrivalSeconds,
+            wave.rooms, wave.drinks, wave.food, wave.relax, wave.oceanView);
+    }
 }
