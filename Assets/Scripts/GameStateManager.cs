@@ -11,6 +11,8 @@ public class GameStateManager : MonoBehaviour
     [SerializeField] private WaveModelComponent waveModel;
     [SerializeField] private WaveStatesComponent states;
     [SerializeField] private WaveServicesComponent services;
+    [Header("Ship")]
+    [SerializeField] private ShipController ship; // SHIP: optional, drag the ShipController object here
     [Header("lifecycle")]
     [SerializeField, Min(0)] private float incomingSeconds = 3;
     private float incomingRemaining;
@@ -56,6 +58,7 @@ public class GameStateManager : MonoBehaviour
         incomingRemaining = Mathf.Max(0, incomingSeconds);
         Publish(true);
         states.TryEnter(GameState.WAVE_INCOMING);
+        if (ship != null) ship.Arrive(); // SHIP: spawn and sail to the dock
         CheckApplicationPause();
     }
 
@@ -65,15 +68,25 @@ public class GameStateManager : MonoBehaviour
         switch (State)
         {
             case GameState.WAVE_INCOMING:
-                incomingRemaining -= Time.deltaTime;
-                if (incomingRemaining <= 0) states.TryEnter(GameState.WAVE_ACTIVE);
+                // SHIP: wait for the ship to arrive; fall back to the timer if no ship is assigned
+                if (ship != null)
+                {
+                    if (ship.HasArrived) states.TryEnter(GameState.WAVE_ACTIVE);
+                }
+                else
+                {
+                    incomingRemaining -= Time.deltaTime;
+                    if (incomingRemaining <= 0) states.TryEnter(GameState.WAVE_ACTIVE);
+                }
                 break;
             case GameState.WAVE_ACTIVE:
                 services.Tick(Time.deltaTime);
                 Publish(false);
+                if (ship != null && CurrentSnapshot.ArrivalsClosed) ship.SetEmpty(); // SHIP: all guests are out
                 if (services.IsComplete) states.TryEnter(GameState.WAVE_RESOLVING, true);
                 break;
             case GameState.WAVE_RESOLVING:
+                if (ship != null) ship.Depart(); // SHIP: sail back to the spawn point
                 states.TryEnter(GameState.WAVE_COMPLETE);
                 PrepareNextWave();
                 break;
@@ -103,6 +116,7 @@ public class GameStateManager : MonoBehaviour
         bool canUpgrade = state == GameState.AWAITING_WAVE || state == GameState.UPGRADE;
         buildings.SetWaveActive(!canUpgrade);
         waveUI.ApplyGameState(state, waveNumber, allComplete);
+        if (ship != null) ship.SetPaused(state == GameState.WAVE_PAUSED); // SHIP: freeze ship while paused
         StateChanged?.Invoke(state);
     }
 

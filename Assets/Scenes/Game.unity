@@ -2273,7 +2273,7 @@ Camera:
   far clip plane: 1000
   field of view: 34
   orthographic: 1
-  orthographic size: 5
+  orthographic size: 29
   m_Depth: -1
   m_CullingMask:
     serializedVersion: 2
@@ -2298,7 +2298,7 @@ Transform:
   m_GameObject: {fileID: 519420028}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -1.6, y: -7.5, z: -10}
+  m_LocalPosition: {x: 0, y: 0, z: -10}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -2324,7 +2324,7 @@ MonoBehaviour:
     width: 20
     height: 20
   zoomInLimit: 0.5
-  offset: 5.5
+  zoom_offset: 10
   scrollSensitivity: 0.15
   startZoomedOut: 1
   inertiaDamping: 6
@@ -3732,6 +3732,7 @@ MonoBehaviour:
   waveModel: {fileID: 2400000002}
   states: {fileID: 2400000012}
   services: {fileID: 2400000022}
+  ship: {fileID: 1851798388}
   incomingSeconds: 3
 --- !u!4 &666306820
 Transform:
@@ -3917,6 +3918,7 @@ MonoBehaviour:
   vSync: 0
   FPS: 1000
   fps_text: {fileID: 123275057}
+  time_scale: 10
 --- !u!4 &717513196
 Transform:
   m_ObjectHideFlags: 0
@@ -5339,7 +5341,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &1009881671
 RectTransform:
   m_ObjectHideFlags: 0
@@ -10925,6 +10927,61 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1848810480}
   m_CullTransparentMesh: 1
+--- !u!1 &1851798387
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1851798389}
+  - component: {fileID: 1851798388}
+  m_Layer: 0
+  m_Name: ShipController
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1851798388
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1851798387}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b016ce8d1163b95b2bdfe9150c4b5018, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ShipController
+  fullSprite: {fileID: -4259825657570711113, guid: 9aa11a9de9ddff24791272cc923ffe19, type: 3}
+  emptySprite: {fileID: -5698095873305366982, guid: fe7ca404551f5ecf78a5d3902b695a7e, type: 3}
+  sortingLayer: Default
+  sortingOrder: 0
+  spawnPosition: {x: 50, y: -45}
+  dockPosition: {x: 10, y: -13}
+  exitPosition: {x: -50, y: -15}
+  arriveRotation: -1
+  exitRotation: 23
+  speed: 5
+  hideAtExit: 1
+--- !u!4 &1851798389
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1851798387}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: -5.41247, y: 5.22847, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1918292803
 GameObject:
   m_ObjectHideFlags: 0
@@ -15553,6 +15610,7 @@ SceneRoots:
   - {fileID: 619394802}
   - {fileID: 1975757726}
   - {fileID: 783816996}
+  - {fileID: 1851798389}
   - {fileID: 1190231755}
   - {fileID: 412647458}
   - {fileID: 1694837009}
