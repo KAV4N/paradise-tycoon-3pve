@@ -195,7 +195,7 @@ public class MvpBuildingSystem : MonoBehaviour
                 status.text += $" - Missing: {b.unlockCoins - coins} Coins";
             if (waveActive) status.text += "\nUnlock available between waves";
             action.interactable = !b.unlocked && !waveActive && GateMet(b) && b.unlockCoins >= 0 && coins >= b.unlockCoins;
-            actionLabel.text = "Unlock";
+            actionLabel.text = "";
         }
         else
         {
@@ -214,7 +214,7 @@ public class MvpBuildingSystem : MonoBehaviour
             if (waveActive) status.text = "Upgrades available between waves";
             action.gameObject.SetActive(next && !waveActive);
             action.interactable = configured && !waveActive && coins >= cost && materials >= mats;
-            actionLabel.text = "Upgrade Now";
+            actionLabel.text = "";
         }
     }
 

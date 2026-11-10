@@ -3,6 +3,7 @@ Shader "Custom/ShoreWaves"
     Properties
     {
         _SdfTex ("Shore Distance Map", 2D) = "white" {}
+        _NoiseTex ("Noise Texture (WaterNoise.png)", 2D) = "gray" {}
         [Toggle] _DebugView ("Debug View (red = outside, blue = inside, green = front)", Float) = 0
         [Toggle] _Overlay ("Overlay mode (set by script on the top quad)", Float) = 0
 
@@ -47,6 +48,7 @@ Shader "Custom/ShoreWaves"
             #include "UnityCG.cginc"
 
             sampler2D _SdfTex;
+            sampler2D _NoiseTex;
             float _DebugView, _Overlay;
             float _FrontStart, _FrontEnd;
             float _WaveCount, _Speed, _WaveWobble, _WobbleScale, _WaveReach, _WashDistance;
@@ -67,23 +69,11 @@ Shader "Custom/ShoreWaves"
                 return o;
             }
 
-            float hash21 (float2 p)
+            // noise from the baked texture (same on every device)
+            float noiseTex (float2 p)
             {
-                p = frac(p * float2(123.34, 456.21));
-                p += dot(p, p + 45.32);
-                return frac(p.x * p.y);
-            }
-
-            float vnoise (float2 p)
-            {
-                float2 i = floor(p);
-                float2 f = frac(p);
-                f = f * f * (3.0 - 2.0 * f);
-                float a = hash21(i);
-                float b = hash21(i + float2(1, 0));
-                float c = hash21(i + float2(0, 1));
-                float d = hash21(i + float2(1, 1));
-                return lerp(lerp(a, b, f.x), lerp(c, d, f.x), f.y);
+                float v = tex2D(_NoiseTex, p).r;
+                return saturate((v - 0.5) * 2.5 + 0.5); // add contrast
             }
 
             float4 frag (v2f i) : SV_Target
@@ -102,8 +92,8 @@ Shader "Custom/ShoreWaves"
 
                 // noise used to bend the lines and break the foam up
                 float2 nuv = uv * float2(1.7, 1.0) * _WobbleScale;
-                float n1 = vnoise(nuv + float2(_Time.y * 0.15, 0));
-                float n2 = vnoise(nuv * 2.3 + float2(0, -_Time.y * 0.25) + 9.1);
+                float n1 = noiseTex(nuv * 0.1 + float2(fmod(_Time.y, 1000.0) * 0.015, 0));
+                float n2 = noiseTex(nuv * 0.23 + float2(0, -fmod(_Time.y, 1000.0) * 0.025) + 0.31);
 
                 // 1 on the island, 0 at sea
                 float inside = 1.0 - smoothstep(-0.01, 0.01, sd);

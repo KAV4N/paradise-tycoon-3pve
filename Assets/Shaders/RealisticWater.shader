@@ -2,6 +2,8 @@ Shader "Custom/RealisticWater"
 {
     Properties
     {
+        _NoiseTex ("Noise Texture (WaterNoise.png)", 2D) = "gray" {}
+
         [Header(Depth Colors)]
         _ShallowColor ("Shallow (near island)", Color) = (0.30, 0.80, 0.78, 1)
         _MidColor ("Mid", Color) = (0.07, 0.52, 0.64, 1)
@@ -49,6 +51,7 @@ Shader "Custom/RealisticWater"
             #pragma fragment frag
             #include "UnityCG.cginc"
 
+            sampler2D _NoiseTex;
             float4 _ShallowColor, _MidColor, _DeepColor;
             float4 _IslandCenter, _IslandRadius;
             float _ShallowStart, _ShallowEnd;
@@ -72,77 +75,40 @@ Shader "Custom/RealisticWater"
                 return o;
             }
 
-            float hash21 (float2 p)
-            {
-                p = frac(p * float2(123.34, 456.21));
-                p += dot(p, p + 45.32);
-                return frac(p.x * p.y);
-            }
-
-            float vnoise (float2 p)
-            {
-                float2 i = floor(p);
-                float2 f = frac(p);
-                f = f * f * (3.0 - 2.0 * f);
-                float a = hash21(i);
-                float b = hash21(i + float2(1, 0));
-                float c = hash21(i + float2(0, 1));
-                float d = hash21(i + float2(1, 1));
-                return lerp(lerp(a, b, f.x), lerp(c, d, f.x), f.y);
-            }
-
-            float fbm (float2 p)
-            {
-                float2x2 rot = float2x2(0.8, -0.6, 0.6, 0.8);
-                float v = 0.0;
-                float a = 0.5;
-                for (int i = 0; i < 3; i++)
-                {
-                    v += a * vnoise(p);
-                    p = mul(rot, p) * 2.0;
-                    a *= 0.5;
-                }
-                return v / 0.875;
-            }
-
-            // two scrolling noise layers = rolling wave height
-            float waveHeight (float2 p, float t)
-            {
-                float a = fbm(p * 0.8 + float2(t, t * 0.6));
-                float b = fbm(p * 1.6 + float2(-t * 0.8, t * 1.1) + 11.7);
-                return a * 0.6 + b * 0.4;
-            }
-
             float4 frag (v2f i) : SV_Target
             {
-                float t = _Time.y * _Speed;
+                // keep time small so nothing jitters after long play sessions
+                float t = fmod(_Time.y * _Speed, 1000.0);
                 float2 uv = i.uv;
                 float el = radians(_ViewAngle);
                 float sinEl = max(sin(el), 0.2);
                 float2 p = uv * _Tiling.xy;
                 p.y /= sinEl; // tilted view squashes waves vertically, like real perspective
 
-                // ---------- wave normal from height field ----------
-                float e = 0.03;
-                float h0 = waveHeight(p, t);
-                float hx = waveHeight(p + float2(e, 0), t);
-                float hy = waveHeight(p + float2(0, e), t);
-                float2 slope = float2(hx - h0, hy - h0) / e;
-                float3 N = normalize(float3(-slope.x * _NormalStrength, -slope.y * _NormalStrength, 1.0));
+                // ---------- wave normal from the baked noise texture ----------
+                // R = height, G/B = slope. Two layers scrolling in different directions.
+                float2 w1 = p * 0.10 + float2(t, t * 0.6) * 0.10;
+                float2 w2 = p * 0.17 + float2(-t * 0.8, t * 1.1) * 0.10 + 0.37;
+                float2 g1 = (tex2D(_NoiseTex, w1).gb - 0.5) * 2.0;
+                float2 g2 = (tex2D(_NoiseTex, w2).gb - 0.5) * 2.0;
+                float2 slope = g1 * 0.6 + g2 * 0.4;
+                float3 N = normalize(float3(-slope.x * _NormalStrength * 2.0, -slope.y * _NormalStrength * 2.0, 1.0));
 
                 // ---------- depth (shallow near island, deep far away) ----------
                 float2 q = (uv - _IslandCenter.xy) / _IslandRadius.xy;
                 float dist = length(q);
-                dist += (fbm(uv * 4.0 + t * 0.3) - 0.5) * 0.35; // organic edge
+                float edge = tex2D(_NoiseTex, uv * float2(1.6, 1.0) * 0.6 + t * 0.03).r;
+                dist += (edge - 0.5) * 0.9; // organic edge
                 float depth = smoothstep(_ShallowStart, _ShallowEnd, dist);
 
                 float3 col = lerp(_ShallowColor.rgb, _MidColor.rgb, smoothstep(0.0, 0.55, depth));
                 col = lerp(col, _DeepColor.rgb, smoothstep(0.45, 1.0, depth));
 
                 // ---------- caustics on the shallow seabed ----------
-                float2 cq = p * 0.7;
-                float r1 = 1.0 - abs(2.0 * fbm(cq + float2(t * 0.8, t * 0.5)) - 1.0);
-                float r2 = 1.0 - abs(2.0 * fbm(cq * 1.3 + float2(-t * 0.6, t * 0.7) + 5.2) - 1.0);
+                float c1 = tex2D(_NoiseTex, p * 0.05 + float2(t * 0.8, t * 0.5) * 0.05).r;
+                float c2 = tex2D(_NoiseTex, p * 0.065 + float2(-t * 0.6, t * 0.7) * 0.05 + 0.31).r;
+                float r1 = 1.0 - abs(2.0 * c1 - 1.0);
+                float r2 = 1.0 - abs(2.0 * c2 - 1.0);
                 float caustic = pow(saturate(r1 * r2), _CausticSharpness);
                 float shallowMask = pow(1.0 - depth, 2.0);
                 col += _CausticColor.rgb * caustic * _CausticIntensity * shallowMask;
@@ -160,7 +126,6 @@ Shader "Custom/RealisticWater"
                 float spec = pow(saturate(dot(N, H)), _SpecPower) * _SpecIntensity;
                 col += spec * float3(1.0, 0.98, 0.92);
 
-                // faint sky reflection on tilted wave faces
                 // fresnel: the lower the view angle, the more sky the water reflects
                 float ndv = saturate(dot(N, V));
                 float fres = pow(1.0 - ndv, 3.0) * 3.0;
