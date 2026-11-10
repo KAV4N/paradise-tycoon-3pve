@@ -177,10 +177,10 @@ public class MvpBuildingSystem : MonoBehaviour
     {
         if (selected == null || overlay == null) return;
         var b = selected;
-        var rect = (RectTransform)card.transform;
-        rect.anchorMin = new Vector2(0.18f, 0.08f);
-        rect.anchorMax = new Vector2(0.82f, 0.92f);
-        rect.offsetMin = rect.offsetMax = Vector2.zero;
+        // var rect = (RectTransform)card.transform;
+        // rect.anchorMin = new Vector2(0.18f, 0.08f);
+        // rect.anchorMax = new Vector2(0.82f, 0.92f);
+        // rect.offsetMin = rect.offsetMax = Vector2.zero;
         heading.text = b.displayName + (areaView ? " - Area Unlock" : "");
         balances.text = $"Coins {coins}    Materials {materials}    Reputation {reputation}    Resort Value {resortValue}";
         action.gameObject.SetActive(!waveActive && !(areaView && b.unlocked));
