@@ -113,7 +113,8 @@ public class WaveUIController : MonoBehaviour
         // Zmena farby na čisto sivú (bez zmeny priehľadnosti/alpha)
         if (startWaveButtonTexture != null)
         {
-            startWaveButtonTexture.color = inProgress ? new Color(0.45f, 0.45f, 0.45f, 1f) : Color.white;
+            // startWaveButtonTexture.color = inProgress ? new Color(0.45f, 0.45f, 0.45f, 1f) : Color.white;
+            startWaveButtonTexture.enabled = !startWaveButtonTexture.enabled;
         }
 
         // 2. Stavový indikátor (nie tlačidlo)
@@ -230,7 +231,10 @@ public class WaveUIController : MonoBehaviour
     public void ApplyGameState(GameState state, int wave, bool allComplete)
     {
         presentationState = state;
+        if (startWaveButton != null)
+            startWaveButton.gameObject.SetActive(state == GameState.AWAITING_WAVE && !allComplete);
         SetWaveState(state == GameState.WAVE_ACTIVE || state == GameState.WAVE_PAUSED);
+
         if (startWaveButton != null) startWaveButton.interactable = state == GameState.AWAITING_WAVE && !allComplete;
         string status;
         switch (state)
@@ -249,8 +253,8 @@ public class WaveUIController : MonoBehaviour
         if (openSidePanelArrowButton != null) openSidePanelArrowButton.interactable = panelAvailable;
         if (sidePanel != null) sidePanel.SetActive(panelAvailable);
         EnsureFlowButton();
-        flowCanvas.SetActive(state == GameState.WAVE_INCOMING || state == GameState.WAVE_ACTIVE || state == GameState.WAVE_PAUSED);
-        flowLabel.text = state == GameState.WAVE_PAUSED ? "Resume" : "Pause";
+        // flowCanvas.SetActive(state == GameState.WAVE_INCOMING || state == GameState.WAVE_ACTIVE || state == GameState.WAVE_PAUSED);
+        // flowLabel.text = state == GameState.WAVE_PAUSED ? "Resume" : "Pause";
     }
 
     public void RenderWave(WaveSnapshot snapshot, bool rebuild)
@@ -284,20 +288,20 @@ public class WaveUIController : MonoBehaviour
     private void EnsureFlowButton()
     {
         if (flowCanvas != null) return;
-        flowCanvas = new GameObject("Wave controls", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
-        var canvas = flowCanvas.GetComponent<Canvas>(); canvas.renderMode = RenderMode.ScreenSpaceOverlay; canvas.sortingOrder = 101;
-        var scaler = flowCanvas.GetComponent<CanvasScaler>(); scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-        scaler.referenceResolution = new Vector2(1280, 720); scaler.matchWidthOrHeight = 0.5f;
-        var go = new GameObject("Wave action", typeof(RectTransform), typeof(Image), typeof(Button));
-        go.transform.SetParent(flowCanvas.transform, false);
-        var rect = go.GetComponent<RectTransform>(); rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 0);
-        rect.pivot = new Vector2(0.5f, 0); rect.anchoredPosition = new Vector2(0, 24); rect.sizeDelta = new Vector2(280, 48);
-        go.GetComponent<Image>().color = new Color(0.1f, 0.25f, 0.3f);
-        flowButton = go.GetComponent<Button>(); flowButton.onClick.AddListener(() => FlowActionRequested?.Invoke());
-        var label = new GameObject("Label", typeof(RectTransform), typeof(TextMeshProUGUI)); label.transform.SetParent(go.transform, false);
-        var labelRect = label.GetComponent<RectTransform>(); labelRect.anchorMin = Vector2.zero; labelRect.anchorMax = Vector2.one;
-        labelRect.offsetMin = labelRect.offsetMax = Vector2.zero;
-        flowLabel = label.GetComponent<TextMeshProUGUI>(); flowLabel.fontSize = 22; flowLabel.alignment = TextAlignmentOptions.Center; flowLabel.raycastTarget = false;
+        // flowCanvas = new GameObject("Wave controls", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
+        // var canvas = flowCanvas.GetComponent<Canvas>(); canvas.renderMode = RenderMode.ScreenSpaceOverlay; canvas.sortingOrder = 101;
+        // var scaler = flowCanvas.GetComponent<CanvasScaler>(); scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        // scaler.referenceResolution = new Vector2(1280, 720); scaler.matchWidthOrHeight = 0.5f;
+        // var go = new GameObject("Wave action", typeof(RectTransform), typeof(Image), typeof(Button));
+        // go.transform.SetParent(flowCanvas.transform, false);
+        // var rect = go.GetComponent<RectTransform>(); rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 0);
+        // rect.pivot = new Vector2(0.5f, 0); rect.anchoredPosition = new Vector2(0, 24); rect.sizeDelta = new Vector2(280, 48);
+        // go.GetComponent<Image>().color = new Color(0.1f, 0.25f, 0.3f);
+        // flowButton = go.GetComponent<Button>(); flowButton.onClick.AddListener(() => FlowActionRequested?.Invoke());
+        // var label = new GameObject("Label", typeof(RectTransform), typeof(TextMeshProUGUI)); label.transform.SetParent(go.transform, false);
+        // var labelRect = label.GetComponent<RectTransform>(); labelRect.anchorMin = Vector2.zero; labelRect.anchorMax = Vector2.one;
+        // labelRect.offsetMin = labelRect.offsetMax = Vector2.zero;
+        // flowLabel = label.GetComponent<TextMeshProUGUI>(); flowLabel.fontSize = 22; flowLabel.alignment = TextAlignmentOptions.Center; flowLabel.raycastTarget = false;
     }
 
     private void OnDestroy() { if (flowCanvas != null) Destroy(flowCanvas); }
