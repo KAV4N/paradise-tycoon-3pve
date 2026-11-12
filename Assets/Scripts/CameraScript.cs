@@ -14,6 +14,7 @@ public class MobileCameraController : MonoBehaviour
 
     [Header("Zoom")]
     [Range(0.05f, 0.9f)] public float zoomInLimit = 0.35f;
+    public float zoom_offset = 0.1f;
     public float scrollSensitivity = 0.15f;
     public bool startZoomedOut = false;
 
@@ -224,8 +225,8 @@ public class MobileCameraController : MonoBehaviour
     float GetMaxZoom()
     {
         Bounds b = GetMapBounds();
-        float maxByHeight = b.extents.y;
-        float maxByWidth = b.extents.x / cam.aspect;
+        float maxByHeight = b.extents.y + zoom_offset;
+        float maxByWidth = (b.extents.x + zoom_offset) / cam.aspect;
         return Mathf.Min(maxByHeight, maxByWidth);
     }
 

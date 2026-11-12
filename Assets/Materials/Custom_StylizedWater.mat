@@ -1,0 +1,40 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!21 &2100000
+Material:
+  serializedVersion: 8
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: Custom_StylizedWater
+  m_Shader: {fileID: 4800000, guid: c828cc7ab1b1fa27d96c077f35ee381d, type: 3}
+  m_Parent: {fileID: 0}
+  m_ModifiedSerializedProperties: 0
+  m_ValidKeywords: []
+  m_InvalidKeywords: []
+  m_LightmapFlags: 4
+  m_EnableInstancingVariants: 0
+  m_DoubleSidedGI: 0
+  m_CustomRenderQueue: -1
+  stringTagMap: {}
+  disabledShaderPasses: []
+  m_LockedProperties: 
+  m_SavedProperties:
+    serializedVersion: 3
+    m_TexEnvs: []
+    m_Ints: []
+    m_Floats:
+    - _GradientSize: 1.138
+    - _PatternSoftness: 0.406
+    - _PatternStrength: 0.232
+    - _SparkleAmount: 0.515
+    - _Speed: 0.39
+    - _WaveDistort: 0.0479
+    m_Colors:
+    - _DeepColor: {r: 0.09999997, g: 0.58, b: 0.67, a: 1}
+    - _PatternColor: {r: 0.5, g: 0.9, b: 0.92, a: 1}
+    - _ShallowColor: {r: 0.21999997, g: 0.76, b: 0.8, a: 1}
+    - _Tiling: {r: 12, g: 7, b: 0, a: 0}
+  m_BuildTextureStacks: []
+  m_AllowLocking: 1
