@@ -114,7 +114,7 @@ public class WaveUIController : MonoBehaviour
         if (startWaveButtonTexture != null)
         {
             // startWaveButtonTexture.color = inProgress ? new Color(0.45f, 0.45f, 0.45f, 1f) : Color.white;
-            startWaveButtonTexture.enabled = !startWaveButtonTexture.enabled;
+            startWaveButtonTexture.enabled = true;
         }
 
         // 2. Stavový indikátor (nie tlačidlo)
@@ -231,6 +231,8 @@ public class WaveUIController : MonoBehaviour
     public void ApplyGameState(GameState state, int wave, bool allComplete)
     {
         presentationState = state;
+        if (waveStatusIndicatorContainer != null)
+            waveStatusIndicatorContainer.SetActive(state != GameState.AWAITING_WAVE || allComplete);
         if (startWaveButton != null)
             startWaveButton.gameObject.SetActive(state == GameState.AWAITING_WAVE && !allComplete);
         SetWaveState(state == GameState.WAVE_ACTIVE || state == GameState.WAVE_PAUSED);

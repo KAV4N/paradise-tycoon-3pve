@@ -18,6 +18,8 @@ public class NeedItemUI : MonoBehaviour
     [Header("Color Settings")]
     [SerializeField] private Color normalBarColor = new Color(0.2f, 0.8f, 0.4f); // Zelená
     [SerializeField] private Color warningBarColor = new Color(1f, 0.3f, 0.3f);  // Červená / Oranžová
+    [SerializeField] private Color normalTextColor = new Color(1f, 0.96f, 0.85f);
+    [SerializeField] private Color detailTextColor = new Color(0.76f, 0.9f, 0.85f);
 
     public NeedType Type { get; private set; }
 
@@ -50,7 +52,7 @@ public class NeedItemUI : MonoBehaviour
             else
             {
                 progressText.text = $"{current}/{total}";
-                progressText.color = Color.black;
+                progressText.color = normalTextColor;
             }
         }
 
@@ -72,7 +74,7 @@ public class NeedItemUI : MonoBehaviour
         string status = $"Serving {need.InService} | Queue {need.Waiting}";
         if (need.TracksWaitingTime) status += $" | Wait {need.LongestCurrentWait:F0}s";
         SetWarning(true, status);
-        if (warningText != null) warningText.color = Color.black;
+        if (warningText != null) warningText.color = detailTextColor;
         if (warningIcon != null) warningIcon.gameObject.SetActive(false);
     }
 
