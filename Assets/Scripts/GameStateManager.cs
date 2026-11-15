@@ -11,6 +11,8 @@ public class GameStateManager : MonoBehaviour
     [SerializeField] private WaveModelComponent waveModel;
     [SerializeField] private WaveStatesComponent states;
     [SerializeField] private WaveServicesComponent services;
+    [Header("Next wave forecast")]
+    [SerializeField] private WavePreparationUI preparationUI;
     [Header("Ship")]
     [SerializeField] private ShipController ship; // SHIP: optional, drag the ShipController object here
     [Header("lifecycle")]
@@ -30,7 +32,8 @@ public class GameStateManager : MonoBehaviour
     {
         if (game_data == null) game_data = GetComponent<GameData>();
         if (game_data == null || buildings == null || waveUI == null || waveModel == null ||
-            states == null || services == null || !services.IsConfigured || waveModel.Count == 0)
+            states == null || services == null || !services.IsConfigured || waveModel.Count == 0 ||
+            preparationUI == null || !preparationUI.IsConfigured)
         {
             Debug.LogError("Assign GameData, Buildings, Wave UI and all three task components; configure the wave list and service Buildings reference.", this);
             enabled = false;
@@ -105,7 +108,9 @@ public class GameStateManager : MonoBehaviour
         if (!ready || (State != GameState.AWAITING_WAVE && State != GameState.UPGRADE) || allComplete) return;
         try
         {
-            waveUI.RenderWave(services.Forecast(waveModel.Get(waveNumber)), true);
+            var forecast = services.Forecast(waveModel.Get(waveNumber));
+            waveUI.RenderWave(forecast, true);
+            preparationUI.RenderForecast(forecast);
         }
         catch (ArgumentException exception) { Debug.LogError("Wave configuration: " + exception.Message, this); }
     }
@@ -116,6 +121,7 @@ public class GameStateManager : MonoBehaviour
         bool canUpgrade = state == GameState.AWAITING_WAVE || state == GameState.UPGRADE;
         buildings.SetWaveActive(!canUpgrade);
         waveUI.ApplyGameState(state, waveNumber, allComplete);
+        preparationUI.ApplyState(state, allComplete);
         if (ship != null) ship.SetPaused(state == GameState.WAVE_PAUSED); // SHIP: freeze ship while paused
         StateChanged?.Invoke(state);
     }
