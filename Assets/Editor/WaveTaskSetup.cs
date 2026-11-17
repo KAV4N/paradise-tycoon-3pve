@@ -71,7 +71,7 @@ public static class WaveTaskSetup
             return;
         }
         var waveUI = UnityEngine.Object.FindAnyObjectByType<WaveUIController>();
-        var wallet = UnityEngine.Object.FindAnyObjectByType<MvpBuildingSystem>();
+        var wallet = UnityEngine.Object.FindAnyObjectByType<BuildingSystem>();
         if (waveUI == null || wallet == null) throw new InvalidOperationException("Open the Game scene first.");
         font = wallet.energyHud != null ? wallet.energyHud.font : TMP_Settings.defaultFontAsset;
         Transform parent = waveUI.transform.Find("SafeArea");

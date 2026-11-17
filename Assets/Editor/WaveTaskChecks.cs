@@ -8,10 +8,12 @@ public static class WaveTaskChecks
     [MenuItem("Tools/Waves/Verify Forecast")]
     private static void Verify()
     {
+        var model = WaveModelComponent.FindOrLoad();                 // <-- new
+
         bool pool = false, bungalow = false;
         Func<NeedType, int> capacity = need =>
             need == NeedType.Relax ? (pool ? 3 : 0) : need == NeedType.OceanView ? (bungalow ? 3 : 0) : 3;
-        var definition = WaveCatalog.Get(8);
+        var definition = model.Get(8);                               // <-- changed
         var forecast = new WaveServices(definition, capacity).Snapshot();
         Require(forecast.Needs.Count == 3 && forecast.Elapsed == 0 && forecast.Completed == 0, "Locked services excluded from forecast");
         pool = true;
@@ -21,7 +23,7 @@ public static class WaveTaskChecks
         Require(full.Needs.Count == 5 && full.Total == 135, "Bungalows adds fifth forecast need and exact totals");
         var active = new WaveServices(definition, capacity); active.Tick(15);
         var before = active.Snapshot();
-        new WaveServices(WaveCatalog.Get(1), capacity).Snapshot();
+        new WaveServices(model.Get(1), capacity).Snapshot();         // <-- changed
         Require(active.Snapshot().Elapsed == before.Elapsed && active.Snapshot().Completed == before.Completed, "Forecast cannot reset active service progress");
         var view = UnityEngine.Object.FindAnyObjectByType<WavePreparationUI>(FindObjectsInactive.Include);
         var manager = UnityEngine.Object.FindAnyObjectByType<GameStateManager>();

@@ -4,7 +4,7 @@ using UnityEngine;
 [AddComponentMenu("Waves/Wave Services")]
 public sealed class WaveServicesComponent : MonoBehaviour
 {
-    [SerializeField] private MvpBuildingSystem buildings;
+    [SerializeField] private BuildingSystem buildings;
     [SerializeField, Min(0.1f)] private float serviceSeconds = 12;
     private WaveServices runtime;
     public bool IsConfigured => buildings != null;
@@ -13,7 +13,7 @@ public sealed class WaveServicesComponent : MonoBehaviour
 
     private int AvailableCapacity(NeedType need)
     {
-        var building = buildings.Find(WaveCatalog.BuildingId(need));
+        var building = buildings.Find(WaveModelComponent.BuildingId(need));   // <-- changed
         return building != null && building.unlocked && !building.IsSpa ? Mathf.Max(0, buildings.Capacity(building)) : 0;
     }
     private WaveServices Create(WaveDefinition definition)

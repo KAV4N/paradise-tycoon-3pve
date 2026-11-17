@@ -5,7 +5,7 @@ using UnityEngine;
 public class GameStateManager : MonoBehaviour
 {
     [SerializeField] private GameData game_data;
-    [SerializeField] private MvpBuildingSystem buildings;
+    [SerializeField] private BuildingSystem buildings;
     [SerializeField] private WaveUIController waveUI;
     [Header("Scene components - drag the task objects here")]
     [SerializeField] private WaveModelComponent waveModel;
