@@ -255,8 +255,15 @@ public sealed class WorkerRosterComponent : MonoBehaviour
 
     public bool RestoreState(WorkerRosterSaveData data)
     {
-        if (!initialized || data == null || buildings == null)
+        if (!initialized || data == null || buildings == null || data.schemaVersion != 1)
             return false;
+
+        if (buildings.buildings != null)
+        {
+            foreach (MvpBuildingSystem.Building building in buildings.buildings)
+                if (building != null)
+                    building.workers = 0;
+        }
 
         successfulPaidHires = Mathf.Max(0, data.successfulPaidHires);
         if (data.assignments != null)
