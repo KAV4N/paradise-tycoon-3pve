@@ -17,6 +17,8 @@ public class ServiceQueue
     private int arrived, inService, completed;
     private double multiplier = 1;
     public bool IsComplete => elapsed >= arrivalSeconds && completed == total;
+    public double FillRate => seats.Length * multiplier / serviceSeconds;
+    public double ArrivalRate => elapsed < arrivalSeconds ? total / arrivalSeconds : 0;
     public double SpeedMultiplier
     {
         get => multiplier;
