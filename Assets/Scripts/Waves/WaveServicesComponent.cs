@@ -9,6 +9,7 @@ public sealed class WaveServicesComponent : MonoBehaviour
     private WaveServices runtime;
     public bool IsConfigured => buildings != null;
     public bool IsComplete => runtime != null && runtime.IsComplete;
+    public event Action<NeedType, double, double, double> ServiceSpeedChanged;
 
     private int AvailableCapacity(NeedType need)
     {
@@ -24,6 +25,13 @@ public sealed class WaveServicesComponent : MonoBehaviour
     public WaveSnapshot Forecast(WaveDefinition definition) => Create(definition).Snapshot();
     public void Tick(double seconds) { runtime?.Tick(seconds); }
     public WaveSnapshot Snapshot() => runtime?.Snapshot();
-    public void SetSpeedMultiplier(NeedType need, double multiplier) { runtime?.SetSpeedMultiplier(need, multiplier); }
+    public void SetSpeedMultiplier(NeedType need, double multiplier)
+    {
+        if (runtime == null) return;
+        bool exists = runtime.TryGetRates(need, out double previousRate, out _);
+        runtime.SetSpeedMultiplier(need, multiplier);
+        if (exists && runtime.TryGetRates(need, out double currentRate, out double arrivalRate) && currentRate != previousRate)
+            ServiceSpeedChanged?.Invoke(need, previousRate, currentRate, arrivalRate);
+    }
     public void ClearWave() { runtime = null; }
 }

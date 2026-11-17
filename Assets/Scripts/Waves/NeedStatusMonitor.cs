@@ -10,14 +10,85 @@ public enum NeedStatus
     SATISFIED
 }
 
-// Standalone observer. Nothing subscribes to gameplay or updates UI automatically.
-// A future adapter must call Evaluate with active-wave snapshots and ResetForWave
-// when restarting a wave with the same number and elapsed time.
+// Observes wave events without changing service or queue simulation.
 [AddComponentMenu("Waves/Need Status Monitor")]
 public sealed class NeedStatusMonitor : MonoBehaviour
 {
+    [Header("Scene references")]
+    [SerializeField] private GameStateManager gameStateManager;
+    [SerializeField] private WaveServicesComponent services;
+    [SerializeField] private WaveUIController waveUI;
+    [Header("Status tuning")]
     [SerializeField, Min(0)] private int bottleneckThreshold = 4;
     [SerializeField, Min(0.1f)] private float bottleneckHysteresisSeconds = 3f;
+    [SerializeField, Min(0.1f)] private float feedbackSeconds = 4f;
+    private double feedbackUntil = -1;
+
+    private void OnEnable()
+    {
+        StatusChanged += PresentStatus;
+        if (gameStateManager != null)
+        {
+            gameStateManager.ProgressChanged += OnProgress;
+            gameStateManager.StateChanged += OnWaveState;
+            if (gameStateManager.State == GameState.WAVE_ACTIVE && gameStateManager.CurrentSnapshot != null)
+                OnProgress(gameStateManager.CurrentSnapshot);
+        }
+        if (services != null) services.ServiceSpeedChanged += OnServiceSpeedChanged;
+    }
+
+    private void OnDisable()
+    {
+        StatusChanged -= PresentStatus;
+        if (gameStateManager != null)
+        {
+            gameStateManager.ProgressChanged -= OnProgress;
+            gameStateManager.StateChanged -= OnWaveState;
+        }
+        if (services != null) services.ServiceSpeedChanged -= OnServiceSpeedChanged;
+        ResetPresentation();
+    }
+
+    private void OnProgress(WaveSnapshot snapshot)
+    {
+        if (gameStateManager.State != GameState.WAVE_ACTIVE) return;
+        Evaluate(snapshot);
+        if (feedbackUntil >= 0 && snapshot.Elapsed >= feedbackUntil)
+        {
+            feedbackUntil = -1;
+            if (waveUI != null) waveUI.SetCustomerFeedback(null, null);
+        }
+    }
+
+    private void OnWaveState(GameState state)
+    {
+        if (state == GameState.WAVE_INCOMING || state == GameState.AWAITING_WAVE || state == GameState.UPGRADE)
+            ResetPresentation();
+    }
+
+    private void ResetPresentation()
+    {
+        ResetForWave();
+        feedbackUntil = -1;
+        if (waveUI != null) waveUI.ResetNeedStatuses();
+    }
+
+    private void OnServiceSpeedChanged(NeedType need, double previousRate, double currentRate, double arrivalRate)
+    {
+        if (gameStateManager != null && gameStateManager.State == GameState.WAVE_ACTIVE)
+            NotifyServiceImproved(need, previousRate, currentRate, arrivalRate);
+    }
+
+    private void PresentStatus(NeedType need, NeedStatus status)
+    {
+        if (waveUI == null) return;
+        waveUI.SetNeedStatus(need, status);
+        if (status == NeedStatus.BOTTLENECK || status == NeedStatus.RECOVERING)
+        {
+            waveUI.SetCustomerFeedback(null, WaveUIController.NeedStatusMessage(need, status));
+            feedbackUntil = lastElapsed + Math.Max(0.1, feedbackSeconds);
+        }
+    }
 
     private sealed class Observation
     {
@@ -106,7 +177,7 @@ public sealed class NeedStatusMonitor : MonoBehaviour
         }
     }
 
-    // Optional future hook AFTER a successful player intervention. Rates are units/s,
+    // Called AFTER a successful player intervention. Rates are units/s,
     // using the current service capacity and speed; arrivalRate is zero during drain.
     // A speed increase alone is insufficient: the new throughput must exceed arrivals.
     public bool NotifyServiceImproved(NeedType need, double previousFillRate,

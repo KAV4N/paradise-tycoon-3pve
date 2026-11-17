@@ -17163,6 +17163,7 @@ GameObject:
   m_Component:
   - component: {fileID: 2400000021}
   - component: {fileID: 2400000022}
+  - component: {fileID: 2400000023}
   m_Layer: 0
   m_Name: Wave Services
   m_TagString: Untagged
@@ -17199,6 +17200,24 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::WaveServicesComponent
   buildings: {fileID: 412647459}
   serviceSeconds: 12
+--- !u!114 &2400000023
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2400000020}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fd83018d53d846f99d9d0e90e03f3bb1, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::NeedStatusMonitor
+  gameStateManager: {fileID: 666306819}
+  services: {fileID: 2400000022}
+  waveUI: {fileID: 783816997}
+  bottleneckThreshold: 4
+  bottleneckHysteresisSeconds: 3
+  feedbackSeconds: 4
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
