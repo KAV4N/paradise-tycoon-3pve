@@ -172,8 +172,8 @@ public class BuildingSystem : MonoBehaviour
     private bool areaView;
 
     [SerializeField, HideInInspector] private GameObject overlay, card;
-    [SerializeField, HideInInspector] private TMP_Text heading, summary, price, status, balances, actionLabel, hireManagerLabel;
-    [SerializeField, HideInInspector] private Button action, closeButton, hireManagerButton;
+    [SerializeField, HideInInspector] private TMP_Text heading, summary, price, status, balances, actionLabel;
+    [SerializeField, HideInInspector] private Button action, closeButton;
 
     private void Awake()
     {
@@ -221,7 +221,6 @@ public class BuildingSystem : MonoBehaviour
 
         action.onClick.AddListener(Confirm);
         closeButton.onClick.AddListener(Close);
-        hireManagerButton.onClick.AddListener(HireSelectedManager);
 
         // Only a fresh game gets the starting roster. A loaded game already has its Workers.
         if (TotalWorkers == 0)
@@ -474,7 +473,7 @@ public class BuildingSystem : MonoBehaviour
     private string ManagerMultiplierText() =>
         managerMultiplier.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
 
-    // Hiring is only possible between waves, from the building panel or the S5 offer.
+    // Hiring is only possible between waves. API only: the UI that calls it lives elsewhere (e.g. S5).
     public bool CanHireManager(Building b, out string reason)
     {
         reason = null;
@@ -772,7 +771,6 @@ public class BuildingSystem : MonoBehaviour
                 coins >= b.unlockCoins;
 
             actionLabel.text = "Unlock";
-            hireManagerButton.gameObject.SetActive(false);
         }
         else
         {
@@ -839,22 +837,6 @@ public class BuildingSystem : MonoBehaviour
                 materials >= mats;
 
             actionLabel.text = "Upgrade Now";
-
-            bool showManager = !b.IsSpa && !b.hasManager && !waveActive;
-
-            hireManagerButton.gameObject.SetActive(showManager);
-
-            if (showManager)
-            {
-                bool canHire = CanHireManager(b, out string hireReason);
-
-                hireManagerButton.interactable = canHire;
-                hireManagerLabel.text =
-                    $"Hire {ManagerTitle(b)} - {managerHireCost} Coins\n" +
-                    (canHire || hireReason == null
-                        ? $"{b.displayName} service x{ManagerMultiplierText()}"
-                        : hireReason);
-            }
         }
     }
 
@@ -915,12 +897,6 @@ public class BuildingSystem : MonoBehaviour
             TryUpgrade(selected);
     }
 
-    private void HireSelectedManager()
-    {
-        if (selected != null)
-            TryHireManager(selected);
-    }
-
     private void SyncArt(Building b)
     {
         if (b.slot == null)
@@ -978,11 +954,15 @@ public class BuildingSystem : MonoBehaviour
             overlay.SetActive(false);
         }
 
-        // A panel built by an older version of this script has no Manager button yet.
-        if (hireManagerButton == null && card != null)
+        // A panel saved by an earlier version may still contain the removed Manager hire button.
+        var staleButton = card.transform.Find("Hire Manager");
+
+        if (staleButton != null)
         {
-            hireManagerButton = Button("Hire Manager", 0.20f, 0.19f, 0.80f, 0.30f, out hireManagerLabel);
-            hireManagerLabel.fontSize = 20;
+            if (Application.isPlaying)
+                Destroy(staleButton.gameObject);
+            else
+                DestroyImmediate(staleButton.gameObject);
         }
 
         LayoutPanel();
@@ -994,12 +974,11 @@ public class BuildingSystem : MonoBehaviour
         Anchor(card.transform, 0.22f, 0.10f, 0.78f, 0.90f);
 
         Anchor(heading.transform, 0.08f, 0.84f, 0.92f, 0.95f);
-        Anchor(summary.transform, 0.08f, 0.52f, 0.92f, 0.82f);
-        Anchor(price.transform, 0.08f, 0.40f, 0.92f, 0.52f);
-        Anchor(status.transform, 0.08f, 0.31f, 0.92f, 0.40f);
+        Anchor(summary.transform, 0.08f, 0.43f, 0.92f, 0.82f);
+        Anchor(price.transform, 0.08f, 0.29f, 0.92f, 0.43f);
+        Anchor(status.transform, 0.08f, 0.19f, 0.92f, 0.29f);
         Anchor(balances.transform, 0.05f, 0.01f, 0.95f, 0.07f);
 
-        Anchor(hireManagerButton.transform, 0.20f, 0.19f, 0.80f, 0.30f);
         Anchor(closeButton.transform, 0.08f, 0.08f, 0.47f, 0.18f);
         Anchor(action.transform, 0.53f, 0.08f, 0.92f, 0.18f);
     }
