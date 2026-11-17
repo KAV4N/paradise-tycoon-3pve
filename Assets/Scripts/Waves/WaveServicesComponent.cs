@@ -8,7 +8,7 @@ public sealed class WaveServicesComponent : MonoBehaviour
     [SerializeField] private WorkerRosterComponent workerRoster;
     [SerializeField, Min(0.1f)] private float serviceSeconds = 12;
     private WaveServices runtime;
-    public bool IsConfigured => buildings != null;
+    public bool IsConfigured => buildings != null && workerRoster != null;
     public bool IsComplete => runtime != null && runtime.IsComplete;
     public event Action<NeedType, double, double, double> ServiceSpeedChanged;
 
@@ -19,7 +19,7 @@ public sealed class WaveServicesComponent : MonoBehaviour
     }
     private WaveServices Create(WaveDefinition definition)
     {
-        if (!IsConfigured) throw new ArgumentException("Assign Buildings on the Wave Services scene component.");
+        if (!IsConfigured) throw new ArgumentException("Assign Buildings and Worker Roster on the Wave Services scene component.");
         var created = new WaveServices(definition, AvailableCapacity, serviceSeconds);
         if (workerRoster != null)
         {
