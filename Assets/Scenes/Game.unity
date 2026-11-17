@@ -2249,6 +2249,7 @@ GameObject:
   m_Component:
   - component: {fileID: 412647458}
   - component: {fileID: 412647459}
+  - component: {fileID: 900000001}
   m_Layer: 0
   m_Name: Buildings
   m_TagString: Untagged
@@ -17199,6 +17200,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::WaveServicesComponent
   buildings: {fileID: 412647459}
+  workerRoster: {fileID: 900000001}
   serviceSeconds: 20
 --- !u!114 &2400000023
 MonoBehaviour:
@@ -17239,3 +17241,19 @@ SceneRoots:
   - {fileID: 2400000011}
   - {fileID: 2400000021}
   - {fileID: 797403575}
+
+--- !u!114 &900000001
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 412647457}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5b8e9d2f3a4c5d6e0f1a2b3c4d5e6f70, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::WorkerRosterComponent
+  buildings: {fileID: 412647459}
+  gameState: {fileID: 666306819}
+  tuning: {fileID: 11400000, guid: 6c9f0e3a4b5d6e7f1a2b3c4d5e6f7081, type: 2}
