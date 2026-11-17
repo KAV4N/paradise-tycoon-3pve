@@ -179,9 +179,6 @@ public sealed class WorkerRosterComponent : MonoBehaviour
         target.workers++;
         successfulPaidHires++;
 
-        ReconcileRoster();
-        ApplyUtilization(target);
-        PublishRoster();
         buildings.NotifyExternalChange();
 
         result = new HireResult(true, HireFailureReason.None, result.Cost, targetBuildingId, "Worker hired.");
@@ -205,10 +202,6 @@ public sealed class WorkerRosterComponent : MonoBehaviour
         source.workers--;
         target.workers++;
 
-        ReconcileRoster();
-        ApplyUtilization(source);
-        ApplyUtilization(target);
-        PublishRoster();
         buildings.NotifyExternalChange();
 
         result = new WorkerMoveResult(true, WorkerMoveFailureReason.None, sourceBuildingId, targetBuildingId, "Worker moved.");
@@ -281,9 +274,6 @@ public sealed class WorkerRosterComponent : MonoBehaviour
             }
         }
 
-        ReconcileRoster();
-        ApplyAllUtilization();
-        PublishRoster();
         buildings.NotifyExternalChange();
         return true;
     }
@@ -310,7 +300,7 @@ public sealed class WorkerRosterComponent : MonoBehaviour
         if (target.workers >= buildings.WorkerSlots(target))
             return HireFailure(HireFailureReason.NoFreeSlot, price, targetBuildingId, "This building has no free Worker slot.");
 
-        if (WorkerCount >= WorkerCap)
+        if (WorkerCount + 1 >= WorkerCap)
             return HireFailure(HireFailureReason.WorkerCapReached, price, targetBuildingId, "Upgrade buildings to open more shifts.");
 
         if (price < 0 || buildings.coins < price)
