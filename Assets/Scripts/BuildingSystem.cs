@@ -82,6 +82,8 @@ public class BuildingSystem : MonoBehaviour
     [Min(0)] public int resortValue;
 
     [Header("Phase - wave controller calls SetWaveActive")]
+    [Tooltip("True in WAVE_INCOMING, WAVE_ACTIVE, WAVE_PAUSED and WAVE_RESOLVING. " +
+             "False in AWAITING_WAVE, WAVE_COMPLETE and UPGRADE.")]
     public bool waveActive;
 
     [Header("Wave building levels - capacity and tuning")]
@@ -89,27 +91,28 @@ public class BuildingSystem : MonoBehaviour
     public int[] workerSlotsByLevel = { 1, 1, 1, 2, 3 };
     public int[] upgradeCoinsByLevel = { 0, 500, 1200, 2500, 5000 };
 
-    [Tooltip("Lv4/5 require Materials. Costs are tuning. A negative value blocks purchase until configured.")]
-    public int[] upgradeMaterialsByLevel = { 0, 0, 0, 1000, 2500 };
+    [Tooltip("Indexed by the level being reached. Lv4/5 require Materials, but the design documents " +
+             "do not specify the amounts. -1 = not specified, purchase stays blocked until configured.")]
+    public int[] upgradeMaterialsByLevel = { 0, 0, 0, -1, -1 };
 
     [Tooltip("Proposed Resort Value gains, tune with economy data.")]
     public int[] resortValueByLevel = { 0, 75, 150, 250, 500 };
 
     [Header("Workers - hiring (TUNING)")]
-    [Min(0)] public int hiredWorkers;
     [Min(0)] public int baseWorkerHireCost = 400;
     [Min(0)] public int workerHireCostStep = 200;
-    [Range(0f, 1f)] public float workerCapRatio = 0.8f;
+    [Range(0f, 0.95f)] public float workerCapRatio = 0.8f;
 
     [Header("Workers - utilization (TUNING)")]
-    [Tooltip("Utilization when the building has no Worker. Must stay above 0 (WR2).")]
-    [Range(0.01f, 1f)] public float utilizationEmpty = 0.33f;
-    [Tooltip("Utilization with the first Worker on the building.")]
-    [Range(0.01f, 1f)] public float utilizationFirst = 1f;
-    [Tooltip("Additional utilization granted by the second Worker (diminishing).")]
-    [Range(0f, 1f)] public float utilizationSecond = 0.2f;
-    [Tooltip("Additional utilization granted by the third Worker (diminishing).")]
-    [Range(0f, 1f)] public float utilizationThird = 0.1f;
+    [Tooltip("Utilization when the building has no Worker. Must stay above 0 (WR2). Document range 0.1-0.6.")]
+    [Range(0.1f, 0.6f)] public float utilizationEmpty = 0.33f;
+    [Tooltip("Additional utilization granted by the second Worker (diminishing, less than the first).")]
+    [Range(0f, 0.99f)] public float utilizationSecond = 0.2f;
+    [Tooltip("Additional utilization granted by the third Worker (diminishing, less than the second).")]
+    [Range(0f, 0.99f)] public float utilizationThird = 0.1f;
+
+    // utilization_staffed is fixed at 1.0 in the design documents.
+    private const float UtilizationStaffed = 1f;
 
     [Header("Buildings - proposed Reputation tuning: 100 / 300 / 600")]
     public Building[] buildings =
@@ -122,8 +125,34 @@ public class BuildingSystem : MonoBehaviour
         new Building("Spa", "Spa", NeedType.None, false, 2500, 600)
     };
 
+    // Number of Workers bought for Coins. Workers that came with a building unlock or the starting
+    // roster are free and are not counted here.
+    [SerializeField, HideInInspector] private int paidHires;
+
+    // Every Worker always stands on a building, so the total is derived from the buildings.
+    public int TotalWorkers
+    {
+        get
+        {
+            int sum = 0;
+
+            foreach (var b in buildings)
+                if (b != null && !b.IsSpa)
+                    sum += Mathf.Max(0, b.workers);
+
+            return sum;
+        }
+    }
+
+    public int HiredWorkers => TotalWorkers;
+    public int PaidHires => paidHires;
+
     public event Action OnChanged;
     public event Action<Building> OnBuildingUnlocked;
+
+    // Raised when a built building is tapped during a wave. The tap leads to Worker Allocation (S3),
+    // never to an upgrade. The S3 UI subscribes to this event.
+    public event Action<Building> OnWorkerAllocationRequested;
 
     private readonly List<KeyValuePair<BuildingSlot, UnityAction>> listeners =
         new List<KeyValuePair<BuildingSlot, UnityAction>>();
@@ -178,7 +207,29 @@ public class BuildingSystem : MonoBehaviour
         action.onClick.AddListener(Confirm);
         closeButton.onClick.AddListener(Close);
 
+        // Only a fresh game gets the starting roster. A loaded game already has its Workers.
+        if (TotalWorkers == 0)
+            SeedStartingWorkers();
+
         RefreshHud();
+    }
+
+    // Starting roster: always one Worker fewer than buildings (3 buildings -> 2 Workers).
+    private void SeedStartingWorkers()
+    {
+        int cap = WorkerCap();
+
+        foreach (var b in buildings)
+        {
+            if (b == null || !b.unlocked || b.IsSpa)
+                continue;
+
+            if (TotalWorkers >= cap)
+                break;
+
+            if (b.workers < WorkerSlots(b))
+                b.workers++;
+        }
     }
 
     public Building Find(string id)
@@ -238,21 +289,18 @@ public class BuildingSystem : MonoBehaviour
         return slots > 0 && b.workers < slots;
     }
 
-    public bool TryAddWorker(Building b)
+    // Moving a Worker is free and instant, in AWAITING_WAVE and during a wave.
+    // The Worker always ends up on a building with a free slot.
+    public bool TryMoveWorker(Building from, Building to)
     {
-        if (!TryAddWorkerInternal(b))
+        if (from == null || to == null || from == to || from.IsSpa || to.IsSpa)
             return false;
 
-        NotifyWorkerChange();
-        return true;
-    }
-
-    public bool TryRemoveWorker(Building b)
-    {
-        if (b == null || b.IsSpa || b.workers <= 0)
+        if (from.workers <= 0 || !CanAddWorker(to))
             return false;
 
-        b.workers--;
+        from.workers--;
+        to.workers++;
 
         NotifyWorkerChange();
         return true;
@@ -269,25 +317,21 @@ public class BuildingSystem : MonoBehaviour
         return sum;
     }
 
-    public int WorkerCap() =>
-        Mathf.FloorToInt(workerCapRatio * TotalWorkerSlots());
-
-    private int FreeWorkersFromUnlocks()
+    // Hard rule: there are always fewer Workers than slots, whatever the tuned ratio is.
+    public int WorkerCap()
     {
-        int n = 0;
+        int slots = TotalWorkerSlots();
 
-        foreach (var b in buildings)
-            if (b != null && b.unlocked && !b.IsSpa)
-                n++;
+        if (slots <= 0)
+            return 0;
 
-        return n;
+        int byRatio = Mathf.FloorToInt(workerCapRatio * slots + 0.0001f);
+
+        return Mathf.Clamp(byRatio, 0, slots - 1);
     }
 
-    public int NextWorkerHireCost()
-    {
-        int paid = Mathf.Max(0, hiredWorkers - FreeWorkersFromUnlocks());
-        return baseWorkerHireCost + workerHireCostStep * paid;
-    }
+    public int NextWorkerHireCost() =>
+        baseWorkerHireCost + workerHireCostStep * Mathf.Max(0, paidHires);
 
     public bool CanHireWorker(Building target, out string reason)
     {
@@ -305,7 +349,7 @@ public class BuildingSystem : MonoBehaviour
             return false;
         }
 
-        if (hiredWorkers >= WorkerCap())
+        if (TotalWorkers >= WorkerCap())
         {
             reason = "Upgrade buildings to open more shifts";
             return false;
@@ -335,27 +379,11 @@ public class BuildingSystem : MonoBehaviour
 
         int cost = NextWorkerHireCost();
 
-        if (!TryAddWorkerInternal(target))
-            return false;
-
+        target.workers++;
         coins -= cost;
-        hiredWorkers++;
+        paidHires++;
 
         NotifyWorkerChange();
-        return true;
-    }
-
-    private bool TryAddWorkerInternal(Building b)
-    {
-        if (b == null || !b.unlocked || b.IsSpa)
-            return false;
-
-        int slots = WorkerSlots(b);
-
-        if (slots <= 0 || b.workers >= slots)
-            return false;
-
-        b.workers++;
         return true;
     }
 
@@ -367,7 +395,7 @@ public class BuildingSystem : MonoBehaviour
     }
 
     // Utilization for a single building, derived from the number of assigned Workers.
-    // Never returns 0 so an empty building is slow, not broken (WR2).
+    // Never returns 0 for a built wave building, so an empty building is slow, not broken (WR2).
     public float Utilization(Building b)
     {
         if (b == null || b.IsSpa || !b.unlocked)
@@ -378,7 +406,7 @@ public class BuildingSystem : MonoBehaviour
         if (w <= 0)
             return utilizationEmpty;
 
-        float u = utilizationFirst;
+        float u = UtilizationStaffed;
 
         if (w >= 2)
             u += utilizationSecond;
@@ -386,7 +414,7 @@ public class BuildingSystem : MonoBehaviour
         if (w >= 3)
             u += utilizationThird;
 
-        return Mathf.Max(0.01f, u);
+        return u;
     }
 
     // Utilization for a wave need, looked up through the building that serves it.
@@ -398,7 +426,7 @@ public class BuildingSystem : MonoBehaviour
                 return Utilization(b);
         }
 
-        return 0f; // need has no unlocked building; WaveServices skips it anyway
+        return 0f;
     }
 
     private void SetHud(TMP_Text target, int value)
@@ -462,13 +490,70 @@ public class BuildingSystem : MonoBehaviour
                 resortValue = resortValue
             },
             buildings = records.ToArray(),
-            hiredWorkers = hiredWorkers
+            hiredWorkers = TotalWorkers,
+            paidWorkerHires = paidHires
         };
     }
 
+    // Restores a snapshot made by CaptureProgressData. Values are clamped to the current rules.
+    public bool ApplyProgressData(GameProgressData data)
+    {
+        if (data == null)
+            return false;
+
+        if (data.economy != null)
+        {
+            coins = Mathf.Max(0, data.economy.coins);
+            materials = Mathf.Max(0, data.economy.materials);
+            energy = Mathf.Max(0, data.economy.energy);
+            gems = Mathf.Max(0, data.economy.gems);
+            reputation = Mathf.Max(0, data.economy.reputation);
+            resortValue = Mathf.Max(0, data.economy.resortValue);
+        }
+
+        if (data.buildings != null)
+        {
+            foreach (var record in data.buildings)
+            {
+                if (record == null)
+                    continue;
+
+                var b = Find(record.buildingId);
+                if (b == null)
+                    continue;
+
+                b.unlocked = record.unlocked;
+                b.level = b.IsSpa || !b.unlocked ? 1 : Mathf.Clamp(record.level, 1, MaxLevel(b));
+                b.workers = b.IsSpa || !b.unlocked
+                    ? 0
+                    : Mathf.Clamp(record.assignedWorkers, 0, WorkerSlots(b));
+            }
+        }
+
+        paidHires = Mathf.Max(0, data.paidWorkerHires);
+
+        foreach (var b in buildings)
+            SyncArt(b);
+
+        Close();
+
+        OnChanged?.Invoke();
+        RefreshHud();
+        Refresh();
+
+        return true;
+    }
+
+    // Wave controller contract: true in WAVE_INCOMING, WAVE_ACTIVE, WAVE_PAUSED and WAVE_RESOLVING,
+    // false in AWAITING_WAVE, WAVE_COMPLETE and UPGRADE.
     public void SetWaveActive(bool active)
     {
         waveActive = active;
+
+        // Upgrade and unlock are not offered during a wave, so a panel that is open closes.
+        if (active)
+            Close();
+
         Refresh();
     }
 
@@ -485,6 +570,19 @@ public class BuildingSystem : MonoBehaviour
 
     public void Open(Building b)
     {
+        if (b == null)
+            return;
+
+        // During a wave a tap on a built building leads to Worker Allocation (S3), never to an upgrade.
+        // A construction site does nothing during a wave.
+        if (waveActive)
+        {
+            if (b.unlocked && !b.IsSpa)
+                OnWorkerAllocationRequested?.Invoke(b);
+
+            return;
+        }
+
         if (overlay == null)
             BuildUI();
 
@@ -506,6 +604,9 @@ public class BuildingSystem : MonoBehaviour
     private void Update()
     {
         RefreshHud();
+
+        if (waveActive && selected != null)
+            Close();
 
         if (selected != null)
             Refresh();
@@ -548,9 +649,6 @@ public class BuildingSystem : MonoBehaviour
 
             if (GateMet(b) && !b.unlocked && b.unlockCoins >= 0 && coins < b.unlockCoins)
                 status.text += $" - Missing: {b.unlockCoins - coins} Coins";
-
-            if (waveActive)
-                status.text += "\nUnlock available between waves";
 
             action.interactable =
                 !b.unlocked &&
@@ -605,9 +703,6 @@ public class BuildingSystem : MonoBehaviour
                         ? $"Missing: {Mathf.Max(0, cost - coins)} Coins / {Mathf.Max(0, mats - materials)} Materials"
                         : "Ready to upgrade";
 
-            if (waveActive)
-                status.text = "Upgrades available between waves";
-
             action.gameObject.SetActive(next && !waveActive);
 
             action.interactable =
@@ -653,24 +748,11 @@ public class BuildingSystem : MonoBehaviour
 
         coins -= b.unlockCoins;
         b.unlocked = true;
+        resortValue += Mathf.Max(0, b.unlockResortValueGain);
 
-        int valueGain = Mathf.Max(0, b.unlockResortValueGain);
-        resortValue += valueGain;
-
-        // Every unlocked non-Spa building starts with one Worker.
-        if (!b.IsSpa)
-        {
-            if (!TryAddWorkerInternal(b))
-            {
-                b.unlocked = false;
-                coins += b.unlockCoins;
-                resortValue -= valueGain;
-
-                return false;
-            }
-
-            hiredWorkers++;
-        }
+        // A wave building comes with one Worker, placed on the new building. The Spa has no slots.
+        if (!b.IsSpa && WorkerSlots(b) > 0)
+            b.workers = Mathf.Max(b.workers, 1);
 
         SyncArt(b);
 
@@ -803,6 +885,9 @@ public class BuildingSystem : MonoBehaviour
 #if UNITY_EDITOR
     private void OnValidate()
     {
+        // Diminishing returns: the second Worker adds less than the first, the third less than the second.
+        utilizationThird = Mathf.Min(utilizationThird, utilizationSecond);
+
         if (buildings == null)
             return;
 
@@ -811,6 +896,18 @@ public class BuildingSystem : MonoBehaviour
             if (b != null)
                 b.MigrateLegacyNeed();
         }
+    }
+
+    [ContextMenu("Debug: Seed starting Workers")]
+    private void DebugSeedWorkers()
+    {
+        if (Application.isPlaying)
+            return;
+
+        SeedStartingWorkers();
+
+        UnityEditor.EditorUtility.SetDirty(this);
+        UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(gameObject.scene);
     }
 
     private void ConfigureHudNumber(TMP_Text text, bool iconOnRight)
@@ -891,7 +988,10 @@ public class BuildingSystem : MonoBehaviour
                         Value(upgradeMaterialsByLevel, i) < 0 ||
                         Value(resortValueByLevel, i) < 0)
                     {
-                        throw new InvalidOperationException(b.id + ": missing level costs");
+                        throw new InvalidOperationException(
+                            b.id + ": missing cost for Lv" + (i + 1) +
+                            " (the Materials amounts for Lv4/5 are not specified by the design documents)"
+                        );
                     }
 
                     if (i >= 3 && Value(upgradeMaterialsByLevel, i) == 0)
@@ -1087,7 +1187,12 @@ public class GameProgressData
     public int schemaVersion = 1;
     public EconomyData economy = new EconomyData();
     public BuildingProgressData[] buildings = new BuildingProgressData[0];
+
+    // Total number of Workers on buildings (derived, informational).
     public int hiredWorkers;
+
+    // Workers bought for Coins. Drives the price of the next hire.
+    public int paidWorkerHires;
 }
 
 [Serializable]
