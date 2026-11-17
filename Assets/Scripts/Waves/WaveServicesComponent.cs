@@ -1,10 +1,11 @@
 using System;
-using System.Collections.Generic;
 using UnityEngine;
 
 [AddComponentMenu("Waves/Wave Services")]
 public sealed class WaveServicesComponent : MonoBehaviour
 {
+    private static readonly NeedType[] AllNeeds = (NeedType[])Enum.GetValues(typeof(NeedType));
+
     [SerializeField] private BuildingSystem buildings;
     [SerializeField, Min(0.1f)] private float serviceSeconds = 12;
     private WaveServices runtime;
@@ -16,13 +17,13 @@ public sealed class WaveServicesComponent : MonoBehaviour
     private void OnEnable()
     {
         if (buildings != null)
-            buildings.OnChanged += ApplyWorkerUtilization;
+            buildings.OnChanged += ApplyServiceMultipliers;
     }
 
     private void OnDisable()
     {
         if (buildings != null)
-            buildings.OnChanged -= ApplyWorkerUtilization;
+            buildings.OnChanged -= ApplyServiceMultipliers;
     }
 
     private int AvailableCapacity(NeedType need)
@@ -33,14 +34,14 @@ public sealed class WaveServicesComponent : MonoBehaviour
 
     private WaveServices Create(WaveDefinition definition)
     {
-        if (!IsConfigured) throw new ArgumentException("Assign Buildings on the Wave Services scene component.");
+        if (!IsConfigured) throw new InvalidOperationException("Assign Buildings on the Wave Services scene component.");
         return new WaveServices(definition, AvailableCapacity, serviceSeconds);
     }
 
     public void BeginWave(WaveDefinition definition)
     {
         runtime = Create(definition);
-        ApplyWorkerUtilization();
+        ApplyServiceMultipliers();
     }
 
     public WaveSnapshot Forecast(WaveDefinition definition) => Create(definition).Snapshot();
@@ -49,7 +50,8 @@ public sealed class WaveServicesComponent : MonoBehaviour
 
     public WaveSnapshot Snapshot() => runtime?.Snapshot();
 
-    // Debug hook. Sets the multiplier directly; Worker utilization is the normal owner.
+    // Sets the speed multiplier of a need directly. The normal owner is ApplyServiceMultipliers
+    // (Worker utilization x Manager multiplier), so this is for debugging and tests.
     public void SetSpeedMultiplier(NeedType need, double multiplier)
     {
         if (runtime == null) return;
@@ -61,17 +63,21 @@ public sealed class WaveServicesComponent : MonoBehaviour
 
     public void ClearWave() { runtime = null; }
 
-    // Pushes Worker utilization into the running wave for every known wave need.
-    public void ApplyWorkerUtilization()
+    // Pushes the combined multiplier (Worker utilization x Manager multiplier) into the running wave
+    // for every wave need. Energy is not part of it yet.
+    public void ApplyServiceMultipliers()
     {
         if (buildings == null || runtime == null) return;
 
-        foreach (NeedType need in Enum.GetValues(typeof(NeedType)))
+        foreach (NeedType need in AllNeeds)
         {
             if (!need.IsWaveNeed()) continue;
-            double u = buildings.WorkerUtilization(need);
-            if (u > 0)
-                SetSpeedMultiplier(need, u);
+            double multiplier = buildings.ServiceMultiplier(need);
+            if (multiplier > 0)
+                SetSpeedMultiplier(need, multiplier);
         }
     }
+
+    // Kept so existing callers still compile.
+    public void ApplyWorkerUtilization() => ApplyServiceMultipliers();
 }

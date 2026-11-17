@@ -36,6 +36,10 @@ public class BuildingSystem : MonoBehaviour
         [HideInInspector]
         public int workers;
 
+        // True once the Manager of this building has been hired. Only wave buildings have a Manager.
+        [HideInInspector]
+        public bool hasManager;
+
         [NonSerialized]
         public BuildingSlot slot;
 
@@ -114,6 +118,13 @@ public class BuildingSystem : MonoBehaviour
     // utilization_staffed is fixed at 1.0 in the design documents.
     private const float UtilizationStaffed = 1f;
 
+    [Header("Managers - hiring and multiplier (TUNING)")]
+    [Tooltip("One-time Coins price of a Manager (example value from the design documents).")]
+    [Min(0)] public int managerHireCost = 800;
+    [Tooltip("manager_multiplier: shortens service on every seat of the building, with or without a Worker. " +
+             "Example x1.2. Keep the spread narrow (1.0-1.4).")]
+    [Range(1f, 1.4f)] public float managerMultiplier = 1.2f;
+
     [Header("Buildings - proposed Reputation tuning: 100 / 300 / 600")]
     public Building[] buildings =
     {
@@ -177,6 +188,10 @@ public class BuildingSystem : MonoBehaviour
                 b.workers = 0;
                 b.needType = NeedType.None;
             }
+
+            // A Manager only exists on a built wave building.
+            if (b.IsSpa || !b.unlocked)
+                b.hasManager = false;
         }
 
         foreach (var slot in GetComponentsInChildren<BuildingSlot>(true))
@@ -429,6 +444,102 @@ public class BuildingSystem : MonoBehaviour
         return 0f;
     }
 
+    // Managers
+
+    // One Manager per wave building. The Lifeguard and Bellhop mapping to Pool and Bungalows
+    // is inferred, the design documents only say "one per wave building".
+    public string ManagerTitle(Building b)
+    {
+        if (b == null)
+            return null;
+
+        switch (b.id)
+        {
+            case "Reception": return "Receptionist";
+            case "Restaurant": return "Chef";
+            case "Bar": return "Bartender";
+            case "Pool": return "Lifeguard";
+            case "Bungalow": return "Bellhop";
+            default: return null; // The Spa has no Manager.
+        }
+    }
+
+    public bool HasManager(Building b) =>
+        b != null && b.hasManager;
+
+    public float ManagerMultiplier(Building b) =>
+        HasManager(b) ? managerMultiplier : 1f;
+
+    private string ManagerMultiplierText() =>
+        managerMultiplier.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+
+    // Hiring is only possible between waves. API only: the UI that calls it lives elsewhere (e.g. S5).
+    public bool CanHireManager(Building b, out string reason)
+    {
+        reason = null;
+
+        if (waveActive)
+        {
+            reason = "Hire available between waves";
+            return false;
+        }
+
+        if (b == null || !b.unlocked || ManagerTitle(b) == null)
+        {
+            reason = "Invalid building";
+            return false;
+        }
+
+        if (b.hasManager)
+        {
+            reason = "Manager already hired";
+            return false;
+        }
+
+        if (coins < managerHireCost)
+        {
+            reason = $"Missing: {managerHireCost - coins} Coins";
+            return false;
+        }
+
+        return true;
+    }
+
+    public bool TryHireManager(Building b)
+    {
+        if (!CanHireManager(b, out _))
+            return false;
+
+        coins -= managerHireCost;
+        b.hasManager = true;
+
+        OnChanged?.Invoke();
+        RefreshHud();
+        Refresh();
+
+        return true;
+    }
+
+    // Combined service speed multiplier of a building: utilization x manager_multiplier.
+    // Energy is not part of it yet. Never 0 for a built wave building.
+    public float ServiceMultiplier(Building b)
+    {
+        float u = Utilization(b);
+
+        return u > 0f ? u * ManagerMultiplier(b) : 0f;
+    }
+
+    public float ServiceMultiplier(NeedType need)
+    {
+        foreach (var b in buildings)
+        {
+            if (b != null && b.unlocked && !b.IsSpa && b.needType == need)
+                return ServiceMultiplier(b);
+        }
+
+        return 0f;
+    }
+
     private void SetHud(TMP_Text target, int value)
     {
         if (target == null)
@@ -474,7 +585,8 @@ public class BuildingSystem : MonoBehaviour
                 buildingId = b.id,
                 level = b.level,
                 unlocked = b.unlocked,
-                assignedWorkers = b.workers
+                assignedWorkers = b.workers,
+                hasManager = b.hasManager
             });
         }
 
@@ -527,6 +639,7 @@ public class BuildingSystem : MonoBehaviour
                 b.workers = b.IsSpa || !b.unlocked
                     ? 0
                     : Mathf.Clamp(record.assignedWorkers, 0, WorkerSlots(b));
+                b.hasManager = !b.IsSpa && b.unlocked && record.hasManager;
             }
         }
 
@@ -657,22 +770,34 @@ public class BuildingSystem : MonoBehaviour
                 b.unlockCoins >= 0 &&
                 coins >= b.unlockCoins;
 
-            actionLabel.text = "";
+            actionLabel.text = "Unlock";
         }
         else
         {
             bool next = !b.IsSpa && b.level < MaxLevel(b);
 
-            summary.text = $"Level {b.level}" +
-                (b.IsSpa
-                    ? "\nVIP service - unlock only"
-                    : $" / 5\nSeats: {Capacity(b)}" +
-                      (next ? $" -> {Value(capacityByLevel, b.level)}" : "") +
-                      $"\nWorker slots: {WorkerSlots(b)}" +
-                      (next ? $" -> {Value(workerSlotsByLevel, b.level)}" : ""));
+            string levelText = $"Level {b.level}";
 
-            if (next && !b.IsSpa && b.level >= 3)
-                summary.text += "\nUpgrade improves base quality";
+            if (b.IsSpa)
+            {
+                levelText += "\nVIP service - unlock only";
+            }
+            else
+            {
+                levelText += $" / 5\nSeats: {Capacity(b)}" +
+                    (next ? $" -> {Value(capacityByLevel, b.level)}" : "") +
+                    $"\nWorker slots: {WorkerSlots(b)}" +
+                    (next ? $" -> {Value(workerSlotsByLevel, b.level)}" : "") +
+                    "\nManager: " +
+                    (b.hasManager
+                        ? $"{ManagerTitle(b)} x{ManagerMultiplierText()}"
+                        : "not hired");
+
+                if (next && b.level >= 3)
+                    levelText += "\nUpgrade improves base quality";
+            }
+
+            summary.text = levelText;
 
             int cost = Value(upgradeCoinsByLevel, b.level);
             int mats = Value(upgradeMaterialsByLevel, b.level);
@@ -711,7 +836,7 @@ public class BuildingSystem : MonoBehaviour
                 coins >= cost &&
                 materials >= mats;
 
-            actionLabel.text = "";
+            actionLabel.text = "Upgrade Now";
         }
     }
 
@@ -791,43 +916,71 @@ public class BuildingSystem : MonoBehaviour
 
     private void BuildUI()
     {
-        if (overlay != null)
-            return;
+        if (overlay == null)
+        {
+            overlay = new GameObject(
+                "Building Detail and S9",
+                typeof(RectTransform),
+                typeof(Canvas),
+                typeof(CanvasScaler),
+                typeof(GraphicRaycaster)
+            );
 
-        overlay = new GameObject(
-            "Building Detail and S9",
-            typeof(RectTransform),
-            typeof(Canvas),
-            typeof(CanvasScaler),
-            typeof(GraphicRaycaster)
-        );
+            var canvas = overlay.GetComponent<Canvas>();
+            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            canvas.sortingOrder = 100;
 
-        var canvas = overlay.GetComponent<Canvas>();
-        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-        canvas.sortingOrder = 100;
+            var scaler = overlay.GetComponent<CanvasScaler>();
+            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+            scaler.referenceResolution = new Vector2(1280, 720);
+            scaler.matchWidthOrHeight = 0.5f;
 
-        var scaler = overlay.GetComponent<CanvasScaler>();
-        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-        scaler.referenceResolution = new Vector2(1280, 720);
-        scaler.matchWidthOrHeight = 0.5f;
+            var shade = ImageObject("Backdrop", overlay.transform, new Color(0, 0, 0, 0.65f));
+            Anchor(shade.transform, 0, 0, 1, 1);
 
-        var shade = ImageObject("Backdrop", overlay.transform, new Color(0, 0, 0, 0.65f));
-        Anchor(shade.transform, 0, 0, 1, 1);
+            card = ImageObject("Building panel", overlay.transform, new Color(0.055f, 0.14f, 0.18f, 1));
 
-        card = ImageObject("Building panel", overlay.transform, new Color(0.055f, 0.14f, 0.18f, 1));
+            heading = Text("Title", 0, 0, 1, 1, 32);
+            summary = Text("Level capacity and benefit", 0, 0, 1, 1, 26);
+            price = Text("Cost", 0, 0, 1, 1, 23);
+            status = Text("State", 0, 0, 1, 1, 21);
+            balances = Text("Balances", 0, 0, 1, 1, 17);
 
-        heading = Text("Title", 0.08f, 0.84f, 0.92f, 0.95f, 32);
-        summary = Text("Level capacity and benefit", 0.08f, 0.43f, 0.92f, 0.82f, 26);
-        price = Text("Cost", 0.08f, 0.29f, 0.92f, 0.43f, 23);
-        status = Text("State", 0.08f, 0.19f, 0.92f, 0.29f, 21);
-        balances = Text("Balances", 0.05f, 0.01f, 0.95f, 0.07f, 17);
+            action = Button("Upgrade Now", 0.53f, 0.08f, 0.92f, 0.18f, out actionLabel);
 
-        action = Button("Upgrade Now", 0.53f, Confirm, out actionLabel);
+            TMP_Text closeLabel;
+            closeButton = Button("Later / Close", 0.08f, 0.08f, 0.47f, 0.18f, out closeLabel);
 
-        TMP_Text closeLabel;
-        closeButton = Button("Later / Close", 0.08f, Close, out closeLabel);
+            overlay.SetActive(false);
+        }
 
-        overlay.SetActive(false);
+        // A panel saved by an earlier version may still contain the removed Manager hire button.
+        var staleButton = card.transform.Find("Hire Manager");
+
+        if (staleButton != null)
+        {
+            if (Application.isPlaying)
+                Destroy(staleButton.gameObject);
+            else
+                DestroyImmediate(staleButton.gameObject);
+        }
+
+        LayoutPanel();
+    }
+
+    // Single place that defines the panel layout, so it also fixes panels created earlier.
+    private void LayoutPanel()
+    {
+        Anchor(card.transform, 0.22f, 0.10f, 0.78f, 0.90f);
+
+        Anchor(heading.transform, 0.08f, 0.84f, 0.92f, 0.95f);
+        Anchor(summary.transform, 0.08f, 0.43f, 0.92f, 0.82f);
+        Anchor(price.transform, 0.08f, 0.29f, 0.92f, 0.43f);
+        Anchor(status.transform, 0.08f, 0.19f, 0.92f, 0.29f);
+        Anchor(balances.transform, 0.05f, 0.01f, 0.95f, 0.07f);
+
+        Anchor(closeButton.transform, 0.08f, 0.08f, 0.47f, 0.18f);
+        Anchor(action.transform, 0.53f, 0.08f, 0.92f, 0.18f);
     }
 
     private GameObject ImageObject(string label, Transform parent, Color color)
@@ -866,11 +1019,11 @@ public class BuildingSystem : MonoBehaviour
         return text;
     }
 
-    private Button Button(string label, float left, UnityAction click, out TMP_Text text)
+    private Button Button(string label, float x0, float y0, float x1, float y1, out TMP_Text text)
     {
         var go = ImageObject(label, card.transform, new Color(0.85f, 0.34f, 0.08f));
 
-        Anchor(go.transform, left, 0.08f, left + 0.39f, 0.18f);
+        Anchor(go.transform, x0, y0, x1, y1);
 
         var button = go.AddComponent<Button>();
         button.targetGraphic = go.GetComponent<Image>();
@@ -972,7 +1125,7 @@ public class BuildingSystem : MonoBehaviour
 
             if (b.IsSpa)
             {
-                if (b.level != 1 || b.needType != NeedType.None || b.workers != 0 ||
+                if (b.level != 1 || b.needType != NeedType.None || b.workers != 0 || b.hasManager ||
                     Capacity(b) != 0 || WorkerSlots(b) != 0)
                 {
                     throw new InvalidOperationException(
@@ -1213,4 +1366,5 @@ public class BuildingProgressData
     public int level;
     public bool unlocked;
     public int assignedWorkers;
+    public bool hasManager;
 }
