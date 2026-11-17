@@ -5,6 +5,7 @@ using UnityEngine;
 public sealed class WaveServicesComponent : MonoBehaviour
 {
     [SerializeField] private MvpBuildingSystem buildings;
+    [SerializeField] private WorkerRosterComponent workerRoster;
     [SerializeField, Min(0.1f)] private float serviceSeconds = 12;
     private WaveServices runtime;
     public bool IsConfigured => buildings != null;
@@ -19,7 +20,16 @@ public sealed class WaveServicesComponent : MonoBehaviour
     private WaveServices Create(WaveDefinition definition)
     {
         if (!IsConfigured) throw new ArgumentException("Assign Buildings on the Wave Services scene component.");
-        return new WaveServices(definition, AvailableCapacity, serviceSeconds);
+        var created = new WaveServices(definition, AvailableCapacity, serviceSeconds);
+        if (workerRoster != null)
+        {
+            foreach (var pair in definition.Demand)
+            {
+                string buildingId = WaveCatalog.BuildingId(pair.Key);
+                created.SetSpeedMultiplier(pair.Key, workerRoster.GetUtilization(buildingId));
+            }
+        }
+        return created;
     }
     public void BeginWave(WaveDefinition definition) { runtime = Create(definition); }
     public WaveSnapshot Forecast(WaveDefinition definition) => Create(definition).Snapshot();
