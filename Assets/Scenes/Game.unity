@@ -3003,7 +3003,7 @@ MonoBehaviour:
     y: -40
     width: 120
     height: 80
-  zoomInLimit: 0.5
+  zoomInLimit: 0.3
   zoom_offset: 10
   scrollSensitivity: 0.15
   startZoomedOut: 1

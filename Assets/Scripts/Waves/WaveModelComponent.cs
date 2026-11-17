@@ -24,7 +24,9 @@ public sealed class WaveModelComponent : MonoBehaviour
         new WaveEntry(34,20,22,18,16,0), new WaveEntry(40,25,28,22,20,0),
         new WaveEntry(42,25,28,22,20,10), new WaveEntry(52,31,35,28,25,16)
     };
+
     public int Count => waves == null ? 0 : waves.Length;
+
     public WaveDefinition Get(int number)
     {
         if (number < 1 || number > Count || waves[number - 1] == null)
@@ -32,5 +34,26 @@ public sealed class WaveModelComponent : MonoBehaviour
         var wave = waves[number - 1];
         return new WaveDefinition(number, wave.customers, arrivalSeconds,
             wave.rooms, wave.drinks, wave.food, wave.relax, wave.oceanView);
+    }
+
+    public static string BuildingId(NeedType need)
+    {
+        switch (need)
+        {
+            case NeedType.Rooms: return "Reception";
+            case NeedType.Food: return "Restaurant";
+            case NeedType.Drinks: return "Bar";
+            case NeedType.Relax: return "Pool";
+            case NeedType.OceanView: return "Bungalow";
+            default: throw new ArgumentOutOfRangeException(nameof(need));
+        }
+    }
+
+    public static WaveModelComponent FindOrLoad()
+    {
+        var model = UnityEngine.Object.FindAnyObjectByType<WaveModelComponent>(FindObjectsInactive.Include);
+        if (model == null)
+            throw new InvalidOperationException("No WaveModelComponent found in the scene.");
+        return model;
     }
 }
