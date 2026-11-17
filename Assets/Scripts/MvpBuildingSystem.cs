@@ -158,6 +158,14 @@ public class MvpBuildingSystem : MonoBehaviour
     }
 
     public void SetWaveActive(bool active) { waveActive = active; Refresh(); }
+
+    // Backend systems use this after atomic economy or roster changes.
+    public void NotifyExternalChange()
+    {
+        OnChanged?.Invoke();
+        RefreshHud();
+        Refresh();
+    }
     public void AddRewards(int coinGain, int materialGain, int reputationGain, int valueGain)
     {
         coins += Mathf.Max(0, coinGain); materials += Mathf.Max(0, materialGain);
