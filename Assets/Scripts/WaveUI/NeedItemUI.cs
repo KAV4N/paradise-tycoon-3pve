@@ -80,20 +80,21 @@ public class NeedItemUI : MonoBehaviour
         string status = $"Serving {need.InService} | Queue {need.Waiting}";
         if (need.TracksWaitingTime) status += $" | Wait {need.LongestCurrentWait:F0}s";
         bool alert = currentStatus == NeedStatus.BOTTLENECK || currentStatus == NeedStatus.RECOVERING;
+        bool satisfied = currentStatus == NeedStatus.SATISFIED;
         Color color = currentStatus == NeedStatus.BOTTLENECK ? warningBarColor
             : currentStatus == NeedStatus.RECOVERING ? recoveringColor : normalBarColor;
         // Keep the existing single-line detail area and narrow progress counter.
         if (currentStatus == NeedStatus.BOTTLENECK) status = $"Queue growing | Waiting {need.Waiting}";
         else if (currentStatus == NeedStatus.RECOVERING) status = $"Catching up | Waiting {need.Waiting}";
-        else if (currentStatus == NeedStatus.SATISFIED) status = "All guests served";
+        else if (satisfied) status = "Satisfied";
         SetWarning(true, status);
         if (progressBarFill != null) progressBarFill.color = color;
         if (progressText != null)
         {
             progressText.text = $"{need.Completed}/{need.Total}";
-            progressText.color = alert ? color : normalTextColor;
+            progressText.color = alert || satisfied ? color : normalTextColor;
         }
-        if (warningText != null) warningText.color = alert ? color : detailTextColor;
+        if (warningText != null) warningText.color = alert || satisfied ? color : detailTextColor;
         if (warningIcon != null)
         {
             warningIcon.gameObject.SetActive(alert);
