@@ -20,7 +20,7 @@ public sealed class WorkerTuningConfig : ScriptableObject
     public int GetHirePrice(int successfulPaidHires)
     {
         long price = (long)workerBasePrice + (long)Mathf.Max(0, successfulPaidHires) * workerPriceIncrement;
-        return (int)Mathf.Clamp(price, 0L, int.MaxValue);
+        return price >= int.MaxValue ? int.MaxValue : (int)price;
     }
 
     public float GetUtilization(int workerCount)
