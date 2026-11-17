@@ -6355,7 +6355,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 1, y: 0}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: -310, y: -0.5025635}
+  m_AnchoredPosition: {x: -310, y: -0.5024414}
   m_SizeDelta: {x: 700, y: -715.005}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1009881672
@@ -17059,7 +17059,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 03c0ef00aacd22b4da8a4247b9cdc139, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::WaveModelComponent
-  arrivalSeconds: 90
+  arrivalSeconds: 45
   waves:
   - customers: 12
     rooms: 8
@@ -17199,7 +17199,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::WaveServicesComponent
   buildings: {fileID: 412647459}
-  serviceSeconds: 12
+  serviceSeconds: 20
 --- !u!114 &2400000023
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -17210,7 +17210,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: fd83018d53d846f99d9d0e90e03f3bb1, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::NeedStatusMonitor
   gameStateManager: {fileID: 666306819}
   services: {fileID: 2400000022}
