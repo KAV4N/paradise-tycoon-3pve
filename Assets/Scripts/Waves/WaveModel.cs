@@ -34,16 +34,22 @@ public sealed class NeedSnapshot
     public int Completed { get; }
     public double LongestCurrentWait { get; }
     public bool TracksWaitingTime { get; }
+    // Final wait of every unit that has already entered service.
     public IReadOnlyList<double> WaitsBeforeService { get; }
+    // Wait so far of every unit still standing in the queue (not served yet).
+    public IReadOnlyList<double> CurrentWaits { get; }
     // -1 = empty seat; 0..1 = normalized service progress.
     public IReadOnlyList<double> SeatProgress { get; }
     internal NeedSnapshot(NeedType type, int total, int arrived, int waiting, int inService,
-        int completed, double longestWait, double[] waits, double[] seats, bool tracksWaitingTime = true)
+        int completed, double longestWait, double[] waits, double[] seats,
+        bool tracksWaitingTime = true, double[] currentWaits = null)
     {
         Type = type; Total = total; Arrived = arrived; Waiting = waiting; InService = inService;
         Completed = completed; LongestCurrentWait = longestWait;
         TracksWaitingTime = tracksWaitingTime;
-        WaitsBeforeService = Array.AsReadOnly(waits); SeatProgress = Array.AsReadOnly(seats);
+        WaitsBeforeService = Array.AsReadOnly(waits);
+        CurrentWaits = Array.AsReadOnly(currentWaits ?? new double[0]);
+        SeatProgress = Array.AsReadOnly(seats);
     }
 }
 
