@@ -114,8 +114,8 @@ public sealed class WaveResult
     public int Customers { get; }
     public double Satisfaction { get; }
     public int Stars { get; }
-    public int Energy { get; }     // filled by the Energy task
-    public int Materials { get; }  // filled by the Materials task
+    public int Energy { get; }     
+    public int Materials { get; }  
     public bool Perfect => Satisfaction >= 100;
     internal WaveResult(int number, int customers, double satisfaction, int stars, int energy, int materials)
     {
