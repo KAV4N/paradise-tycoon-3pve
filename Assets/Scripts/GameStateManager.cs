@@ -15,6 +15,8 @@ public class GameStateManager : MonoBehaviour
     [SerializeField] private WavePreparationUI preparationUI;
     [Header("Ship")]
     [SerializeField] private ShipController ship; // SHIP: optional, drag the ShipController object here
+    [Header("Wave results")]
+    [SerializeField] private WaveRewardsComponent waveRewards; // optional: prints the wave result to the Console
     [Header("lifecycle")]
     [SerializeField, Min(0)] private float incomingSeconds = 3;
     private float incomingRemaining;
@@ -90,6 +92,7 @@ public class GameStateManager : MonoBehaviour
                 break;
             case GameState.WAVE_RESOLVING:
                 if (ship != null) ship.Depart(); // SHIP: sail back to the spawn point
+                EvaluateWaveResult();            // satisfaction + stars to Console (before ClearWave)
                 states.TryEnter(GameState.WAVE_COMPLETE);
                 PrepareNextWave();
                 break;
@@ -101,6 +104,10 @@ public class GameStateManager : MonoBehaviour
         CurrentSnapshot = services.Snapshot();
         waveUI.RenderWave(CurrentSnapshot, rebuild);
         ProgressChanged?.Invoke(CurrentSnapshot);
+
+        // Optional debug: live satisfaction roughly once per 60 frames. Delete after testing.
+        if (waveRewards != null && !rebuild && Time.frameCount % 60 == 0)
+            Debug.Log($"[Wave {CurrentSnapshot.Number}] live satisfaction: {waveRewards.EvaluateLive(CurrentSnapshot):F1}");
     }
 
     private void RefreshForecast()
@@ -147,6 +154,18 @@ public class GameStateManager : MonoBehaviour
         states.TryEnter(GameState.AWAITING_WAVE);
         RefreshForecast();
     }
+
+    // Final wave evaluation. Must run before PrepareNextWave(), which clears the wave.
+    private void EvaluateWaveResult()
+    {
+        if (waveRewards == null) return;
+        var snapshot = services.Snapshot();
+        // A wave with no available services has no customers to rate.
+        if (snapshot == null || !snapshot.IsComplete || snapshot.Total == 0) return;
+        try { waveRewards.Prepare(snapshot); }
+        catch (Exception exception) { Debug.LogError("Wave result: " + exception.Message, this); }
+    }
+
     private void FlowAction()
     {
         switch (State)
