@@ -4600,6 +4600,7 @@ MonoBehaviour:
   services: {fileID: 2400000022}
   preparationUI: {fileID: 647636322}
   ship: {fileID: 1851798388}
+  waveRewards: {fileID: 1398723026}
   incomingSeconds: 3
 --- !u!4 &666306820
 Transform:
@@ -9704,6 +9705,61 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1391249362}
   m_CullTransparentMesh: 1
+--- !u!1 &1398723025
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1398723027}
+  - component: {fileID: 1398723026}
+  m_Layer: 0
+  m_Name: WaveRewardsComponent
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1398723026
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1398723025}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 85c1cadfd9b345f4ca1c75a65aefda73, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::WaveRewardsComponent
+  rating:
+    patienceGrace: 10
+    patienceFloorAfter: 30
+    unitFloor: 25
+    oceanViewWeight: 1.5
+    starThresholds:
+    - 40
+    - 55
+    - 70
+    - 80
+    - 90
+--- !u!4 &1398723027
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1398723025}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: -5.41247, y: 5.22847, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1417910473
 GameObject:
   m_ObjectHideFlags: 0
@@ -17254,3 +17310,4 @@ SceneRoots:
   - {fileID: 2400000011}
   - {fileID: 2400000021}
   - {fileID: 797403575}
+  - {fileID: 1398723027}
