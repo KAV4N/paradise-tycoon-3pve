@@ -5,7 +5,7 @@ public sealed class WaveRewardsComponent : MonoBehaviour
 {
     [Header("Build document 4.4 - satisfaction tuning")]
     [SerializeField] private WaveRatingRules rating = new WaveRatingRules();
-    // TODO (Energy / Materials tasks): serialized WaveRewardRules + wallet reference + claim.
+    // Energy is granted immediately by GameStateManager; no claim UI is required.
     [SerializeField] private WaveRewardRules rewards = new WaveRewardRules();
 
     public WaveResult Last { get; private set; }

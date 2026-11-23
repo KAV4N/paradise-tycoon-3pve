@@ -93,9 +93,13 @@ public sealed class WaveRatingRules
 [Serializable]
 public sealed class WaveRewardRules
 {
-    // TODO (Energy task): energyByStars table and the Energy amount.
+    public int energyPerCompletedWave = 1;
     // TODO (Materials task): materials roll for 4+ stars.
-    public void Validate() { }
+    public void Validate()
+    {
+        if (energyPerCompletedWave < 1)
+            throw new ArgumentOutOfRangeException(nameof(energyPerCompletedWave), "Completed waves must award positive Energy.");
+    }
 
     public WaveResult Create(WaveSnapshot snapshot, WaveRatingRules rating)
     {
@@ -103,7 +107,7 @@ public sealed class WaveRewardRules
         if (rating == null) throw new ArgumentNullException(nameof(rating));
         double satisfaction = rating.Evaluate(snapshot);
         int stars = rating.Stars(satisfaction);
-        return new WaveResult(snapshot.Number, snapshot.Customers, satisfaction, stars, 0, 0);
+        return new WaveResult(snapshot.Number, snapshot.Customers, satisfaction, stars, energyPerCompletedWave, 0);
     }
 }
 

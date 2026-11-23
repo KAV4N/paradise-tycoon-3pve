@@ -670,6 +670,14 @@ public class BuildingSystem : MonoBehaviour
         Refresh();
     }
 
+    public void AddEnergy(int amount)
+    {
+        if (amount <= 0) return;
+        energy = (int)Math.Min(int.MaxValue, (long)energy + amount);
+        RefreshHud();
+        OnChanged?.Invoke();
+    }
+
     public void AddRewards(int coinGain, int materialGain, int reputationGain, int valueGain)
     {
         coins += Mathf.Max(0, coinGain);
