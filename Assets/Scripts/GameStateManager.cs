@@ -16,11 +16,12 @@ public class GameStateManager : MonoBehaviour
     [Header("Ship")]
     [SerializeField] private ShipController ship; // SHIP: optional, drag the ShipController object here
     [Header("Wave results")]
-    [SerializeField] private WaveRewardsComponent waveRewards; // optional: prints the wave result to the Console
+    [SerializeField] private WaveRewardsComponent waveRewards;
     [Header("lifecycle")]
     [SerializeField, Min(0)] private float incomingSeconds = 3;
     private float incomingRemaining;
     private int waveNumber = 1;
+    private int lastEnergyRewardedWave;
     private bool allComplete;
     private bool ready;
     private bool applicationPaused, focusLost, automaticallyPaused;
@@ -35,12 +36,14 @@ public class GameStateManager : MonoBehaviour
         if (game_data == null) game_data = GetComponent<GameData>();
         if (game_data == null || buildings == null || waveUI == null || waveModel == null ||
             states == null || services == null || !services.IsConfigured || waveModel.Count == 0 ||
-            preparationUI == null || !preparationUI.IsConfigured)
+            preparationUI == null || !preparationUI.IsConfigured || waveRewards == null || !waveRewards.IsConfigured)
         {
             Debug.LogError("Assign GameData, Buildings, Wave UI and all three task components; configure the wave list and service Buildings reference.", this);
             enabled = false;
             return;
         }
+        try { waveRewards.ValidateConfiguration(); }
+        catch (Exception exception) { Debug.LogError("Wave rewards: " + exception.Message, this); enabled = false; return; }
         ready = true;
         states.Changed += ApplyState;
         waveUI.StartWaveRequested += StartWave;
@@ -92,7 +95,7 @@ public class GameStateManager : MonoBehaviour
                 break;
             case GameState.WAVE_RESOLVING:
                 if (ship != null) ship.Depart(); // SHIP: sail back to the spawn point
-                EvaluateWaveResult();            // satisfaction + stars to Console (before ClearWave)
+                EvaluateWaveResult();            // Evaluate and award Energy before ClearWave.
                 states.TryEnter(GameState.WAVE_COMPLETE);
                 PrepareNextWave();
                 break;
@@ -162,7 +165,13 @@ public class GameStateManager : MonoBehaviour
         var snapshot = services.Snapshot();
         // A wave with no available services has no customers to rate.
         if (snapshot == null || !snapshot.IsComplete || snapshot.Total == 0) return;
-        try { waveRewards.Prepare(snapshot); }
+        try
+        {
+            var result = waveRewards.Prepare(snapshot);
+            if (lastEnergyRewardedWave == result.WaveNumber) return;
+            lastEnergyRewardedWave = result.WaveNumber;
+            buildings.AddEnergy(result.Energy);
+        }
         catch (Exception exception) { Debug.LogError("Wave result: " + exception.Message, this); }
     }
 
