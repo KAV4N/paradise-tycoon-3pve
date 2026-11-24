@@ -188,8 +188,8 @@ public sealed class WorkerAllocationUI : MonoBehaviour
                 source != null && !buildingSystem.CanAddWorker(b) ? "FULL" : "";
         }
 
-        if (row.background != null)
-            row.background.color = isSource ? sourceColor : canReceive ? targetColor : normalColor;
+        // if (row.background != null)
+            // row.background.color = isSource ? sourceColor : canReceive ? targetColor : normalColor;
 
         if (row.button != null)
         {

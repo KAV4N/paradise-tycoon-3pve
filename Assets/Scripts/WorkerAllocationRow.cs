@@ -7,7 +7,7 @@ using UnityEngine.UI;
 public sealed class WorkerAllocationRow : MonoBehaviour
 {
     public Button button;           // required: the whole row is clickable
-    public Image background;        // required: tinted by state (normal / source / target)
+    public Sprite background;        // required: tinted by state (normal / source / target)
     public Sprite background2;
     public RawImage background3;
     public TMP_Text nameText;       // "Restaurant (Lv 2)"
