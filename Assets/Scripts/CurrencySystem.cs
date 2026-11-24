@@ -65,6 +65,38 @@ public sealed class ResortValueSystem
         return GainLine("Resort Value gain", gain, "\n");
     }
 
+    public static int AddReputation(int score, int gain)
+    {
+        return (int)Math.Min(int.MaxValue, (long)Math.Max(0, score) + Math.Max(0, gain));
+    }
+
+    public static int RestoreReputation(int savedScore)
+    {
+        return Math.Max(0, savedScore);
+    }
+
+    public static bool HasRequiredReputation(int score, int required)
+    {
+        return required >= 0 && score >= required;
+    }
+
+    public static string ReputationGateText(int score, int required)
+    {
+        return required < 0
+            ? "Reputation threshold not configured"
+            : $"Reputation {score} / {required}";
+    }
+
+    public static string ReputationBalanceText(int score)
+    {
+        return $"Reputation {score}";
+    }
+
+    public static void RefreshReputationHud(TMP_Text hud, int score)
+    {
+        SetText(hud, score.ToString());
+    }
+
     private static string GainLine(string label, int gain, string prefix = "")
     {
         return gain > 0 ? $"{prefix}{label}: +{gain}" : "";

@@ -82,7 +82,10 @@ public class BuildingSystem : MonoBehaviour
     public TMP_Text reputationHud;
     public TMP_Text resortValueHud;
 
-    [Min(0)] public int reputation;
+    [SerializeField, Min(0), UnityEngine.Serialization.FormerlySerializedAs("reputation")]
+    private int reputationScore;
+
+    public int reputation => reputationScore;
     [Min(0)] public int resortValue;
     public ResortValueSystem resortValueSystem = new ResortValueSystem();
 
@@ -178,6 +181,8 @@ public class BuildingSystem : MonoBehaviour
 
     private void Awake()
     {
+        reputationScore = ResortValueSystem.RestoreReputation(reputationScore);
+
         foreach (var b in buildings)
             b.MigrateLegacyNeed();
 
@@ -271,8 +276,11 @@ public class BuildingSystem : MonoBehaviour
     private int Value(int[] data, int index) =>
         data != null && index >= 0 && index < data.Length ? data[index] : -1;
 
+    public bool HasRequiredReputation(int required) =>
+        ResortValueSystem.HasRequiredReputation(reputation, required);
+
     private bool GateMet(Building b) =>
-        b.reputationRequired >= 0 && reputation >= b.reputationRequired;
+        HasRequiredReputation(b.reputationRequired);
 
     public string UnlockState(Building b) =>
         b.unlocked ? "Unlocked" :
@@ -556,7 +564,7 @@ public class BuildingSystem : MonoBehaviour
 
     public void AddReputation(int amount)
     {
-        reputation += Mathf.Max(0, amount);
+        reputationScore = ResortValueSystem.AddReputation(reputation, amount);
 
         OnChanged?.Invoke();
         RefreshHud();
@@ -569,7 +577,7 @@ public class BuildingSystem : MonoBehaviour
         SetHud(materialsHud, materials);
         SetHud(energyHud, energy);
         SetHud(gemsHud, gems);
-        SetHud(reputationHud, reputation);
+        ResortValueSystem.RefreshReputationHud(reputationHud, reputation);
         resortValueSystem.RefreshHud(resortValueHud, resortValue);
     }
 
@@ -622,7 +630,7 @@ public class BuildingSystem : MonoBehaviour
             materials = Mathf.Max(0, data.economy.materials);
             energy = Mathf.Max(0, data.economy.energy);
             gems = Mathf.Max(0, data.economy.gems);
-            reputation = Mathf.Max(0, data.economy.reputation);
+            reputationScore = ResortValueSystem.RestoreReputation(data.economy.reputation);
             resortValue = Mathf.Max(0, data.economy.resortValue);
         }
 
@@ -686,7 +694,7 @@ public class BuildingSystem : MonoBehaviour
     {
         coins += Mathf.Max(0, coinGain);
         materials += Mathf.Max(0, materialGain);
-        reputation += Mathf.Max(0, reputationGain);
+        reputationScore = ResortValueSystem.AddReputation(reputation, reputationGain);
         resortValueSystem.Add(ref resortValue, valueGain);
 
         OnChanged?.Invoke();
@@ -757,7 +765,7 @@ public class BuildingSystem : MonoBehaviour
         heading.text = b.displayName + (areaView ? " - Area Unlock" : "");
 
         balances.text =
-            $"Coins {coins}    Materials {materials}    Reputation {reputation}    {resortValueSystem.BalanceText(resortValue)}";
+            $"Coins {coins}    Materials {materials}    {ResortValueSystem.ReputationBalanceText(reputation)}    {resortValueSystem.BalanceText(resortValue)}";
 
         action.gameObject.SetActive(!waveActive && !(areaView && b.unlocked));
 
@@ -768,9 +776,7 @@ public class BuildingSystem : MonoBehaviour
                 : $"Adds: {b.needType.GetDisplayName()} demand\nIncludes: 1 Worker";
 
             summary.text += "\n\nGate: " +
-                (b.reputationRequired < 0
-                    ? "Reputation threshold not configured"
-                    : $"Reputation {reputation} / {b.reputationRequired}");
+                ResortValueSystem.ReputationGateText(reputation, b.reputationRequired);
 
             price.text =
                 (b.unlockCoins < 0
