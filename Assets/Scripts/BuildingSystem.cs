@@ -6,7 +6,7 @@ using UnityEngine.Events;
 using UnityEngine.UI;
 
 // FR-003, S9 and level-derived capacity.
-public class BuildingSystem : MonoBehaviour
+public partial class BuildingSystem : MonoBehaviour
 {
     [Serializable]
     public class Building
@@ -68,17 +68,7 @@ public class BuildingSystem : MonoBehaviour
         }
     }
 
-    [Header("Balances - connect rewards through AddRewards")]
-    [Min(0)] public int coins;
-    [Min(0)] public int materials;
-    [Min(0)] public int energy;
-    [Min(0)] public int gems;
-
-    [Header("Existing HUD text references")]
-    public TMP_Text coinsHud;
-    public TMP_Text materialsHud;
-    public TMP_Text energyHud;
-    public TMP_Text gemsHud;
+    [Header("Score HUD text references")]
     public TMP_Text reputationHud;
     public TMP_Text resortValueHud;
 
@@ -403,8 +393,10 @@ public class BuildingSystem : MonoBehaviour
 
         int cost = NextWorkerHireCost();
 
+        if (!SpendCurrencies(cost, 0, 0, 0))
+            return false;
+
         target.workers++;
-        coins -= cost;
         paidHires++;
         resortValueSystem.Add(ref resortValue, resortValueSystem.workerHireGain);
 
@@ -520,7 +512,9 @@ public class BuildingSystem : MonoBehaviour
         if (!CanHireManager(b, out _))
             return false;
 
-        coins -= managerHireCost;
+        if (!SpendCurrencies(managerHireCost, 0, 0, 0))
+            return false;
+
         b.hasManager = true;
         resortValueSystem.Add(ref resortValue, resortValueSystem.managerHireGain);
 
@@ -551,17 +545,6 @@ public class BuildingSystem : MonoBehaviour
         return 0f;
     }
 
-    private void SetHud(TMP_Text target, int value)
-    {
-        if (target == null)
-            return;
-
-        string label = value.ToString();
-
-        if (target.text != label)
-            target.text = label;
-    }
-
     public void AddReputation(int amount)
     {
         reputationScore = ResortValueSystem.AddReputation(reputation, amount);
@@ -573,10 +556,7 @@ public class BuildingSystem : MonoBehaviour
 
     private void RefreshHud()
     {
-        SetHud(coinsHud, coins);
-        SetHud(materialsHud, materials);
-        SetHud(energyHud, energy);
-        SetHud(gemsHud, gems);
+        RefreshCurrencyHud();
         ResortValueSystem.RefreshReputationHud(reputationHud, reputation);
         resortValueSystem.RefreshHud(resortValueHud, resortValue);
     }
@@ -603,15 +583,7 @@ public class BuildingSystem : MonoBehaviour
 
         return new GameProgressData
         {
-            economy = new EconomyData
-            {
-                coins = coins,
-                materials = materials,
-                energy = energy,
-                gems = gems,
-                reputation = reputation,
-                resortValue = resortValue
-            },
+            economy = CaptureEconomy(),
             buildings = records.ToArray(),
             hiredWorkers = TotalWorkers,
             paidWorkerHires = paidHires
@@ -626,10 +598,7 @@ public class BuildingSystem : MonoBehaviour
 
         if (data.economy != null)
         {
-            coins = Mathf.Max(0, data.economy.coins);
-            materials = Mathf.Max(0, data.economy.materials);
-            energy = Mathf.Max(0, data.economy.energy);
-            gems = Mathf.Max(0, data.economy.gems);
+            RestoreCurrencies(data.economy);
             reputationScore = ResortValueSystem.RestoreReputation(data.economy.reputation);
             resortValue = Mathf.Max(0, data.economy.resortValue);
         }
@@ -684,16 +653,17 @@ public class BuildingSystem : MonoBehaviour
 
     public void AddEnergy(int amount)
     {
-        if (amount <= 0) return;
-        energy = (int)Math.Min(int.MaxValue, (long)energy + amount);
+        if (amount <= 0)
+            return;
+
+        CreditCurrencies(0, 0, amount, 0);
         RefreshHud();
         OnChanged?.Invoke();
     }
 
     public void AddRewards(int coinGain, int materialGain, int reputationGain, int valueGain)
     {
-        coins += Mathf.Max(0, coinGain);
-        materials += Mathf.Max(0, materialGain);
+        CreditCurrencies(coinGain, materialGain, 0, 0);
         reputationScore = ResortValueSystem.AddReputation(reputation, reputationGain);
         resortValueSystem.Add(ref resortValue, valueGain);
 
@@ -872,13 +842,11 @@ public class BuildingSystem : MonoBehaviour
         int cost = Value(upgradeCoinsByLevel, b.level);
         int mats = Value(upgradeMaterialsByLevel, b.level);
 
-        if (cost < 0 || mats < 0 || (b.level >= 3 && mats == 0) || coins < cost || materials < mats)
+        if ((b.level >= 3 && mats == 0) || !SpendCurrencies(cost, mats, 0, 0))
             return false;
 
         int gain = resortValueSystem.UpgradeGain(resortValueByLevel, b.level);
 
-        coins -= cost;
-        materials -= mats;
         resortValueSystem.Add(ref resortValue, gain);
         b.level++;
 
@@ -892,10 +860,9 @@ public class BuildingSystem : MonoBehaviour
 
     public bool TryUnlock(Building b)
     {
-        if (b == null || b.unlocked || waveActive || !GateMet(b) || b.unlockCoins < 0 || coins < b.unlockCoins)
+        if (b == null || b.unlocked || waveActive || !GateMet(b) || !SpendCurrencies(b.unlockCoins, 0, 0, 0))
             return false;
 
-        coins -= b.unlockCoins;
         b.unlocked = true;
         resortValueSystem.Add(ref resortValue, resortValueSystem.UnlockGain(b));
 
@@ -1203,24 +1170,10 @@ public class BuildingSystem : MonoBehaviour
             if (text.gameObject.scene != gameObject.scene || text.transform.parent == null)
                 continue;
 
+            BindCurrencyHud(text);
+
             switch (text.transform.parent.name)
             {
-                case "Coins":
-                    coinsHud = text;
-                    break;
-
-                case "Materials":
-                    materialsHud = text;
-                    break;
-
-                case "Energy":
-                    energyHud = text;
-                    break;
-
-                case "Gems":
-                    gemsHud = text;
-                    break;
-
                 case "Reputation":
                     reputationHud = text;
                     break;
@@ -1326,10 +1279,7 @@ public class BuildingSystem : MonoBehaviour
 
         BindExistingHud();
 
-        ConfigureHudNumber(coinsHud, true);
-        ConfigureHudNumber(materialsHud, true);
-        ConfigureHudNumber(energyHud, true);
-        ConfigureHudNumber(gemsHud, true);
+        ConfigureCurrencyHud();
         ConfigureHudNumber(reputationHud, false);
         ConfigureHudNumber(resortValueHud, false);
 

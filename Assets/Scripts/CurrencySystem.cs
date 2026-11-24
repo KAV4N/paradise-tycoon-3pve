@@ -108,3 +108,139 @@ public sealed class ResortValueSystem
             target.text = value;
     }
 }
+
+public partial class BuildingSystem
+{
+    [Header("Currency Balances")]
+    [Min(0)] public int coins;
+    [Min(0)] public int materials;
+    [Min(0)] public int energy;
+    [Min(0)] public int gems;
+
+    [Header("Existing HUD text references")]
+    public TMP_Text coinsHud;
+    public TMP_Text materialsHud;
+    public TMP_Text energyHud;
+    public TMP_Text gemsHud;
+
+    public void AddCurrencies(int coinGain = 0, int materialGain = 0, int energyGain = 0, int gemGain = 0)
+    {
+        CreditCurrencies(coinGain, materialGain, energyGain, gemGain);
+
+        OnChanged?.Invoke();
+        RefreshHud();
+        Refresh();
+    }
+
+    public bool TrySpendCurrencies(int coinCost = 0, int materialCost = 0, int energyCost = 0, int gemCost = 0)
+    {
+        if (!SpendCurrencies(coinCost, materialCost, energyCost, gemCost))
+            return false;
+
+        OnChanged?.Invoke();
+        RefreshHud();
+        Refresh();
+        return true;
+    }
+
+    private void CreditCurrencies(int coinGain, int materialGain, int energyGain, int gemGain)
+    {
+        coins = AddCurrency(coins, coinGain);
+        materials = AddCurrency(materials, materialGain);
+        energy = AddCurrency(energy, energyGain);
+        gems = AddCurrency(gems, gemGain);
+    }
+
+    private static int AddCurrency(int balance, int gain)
+    {
+        return (int)Math.Min(int.MaxValue, (long)balance + Mathf.Max(0, gain));
+    }
+
+    private bool SpendCurrencies(int coinCost, int materialCost, int energyCost, int gemCost)
+    {
+        if (coinCost < 0 || materialCost < 0 || energyCost < 0 || gemCost < 0 ||
+            (coinCost > 0 && coins < coinCost) ||
+            (materialCost > 0 && materials < materialCost) ||
+            (energyCost > 0 && energy < energyCost) ||
+            (gemCost > 0 && gems < gemCost))
+            return false;
+
+        coins -= coinCost;
+        materials -= materialCost;
+        energy -= energyCost;
+        gems -= gemCost;
+        return true;
+    }
+
+    private EconomyData CaptureEconomy()
+    {
+        return new EconomyData
+        {
+            coins = coins,
+            materials = materials,
+            energy = energy,
+            gems = gems,
+            reputation = reputation,
+            resortValue = resortValue
+        };
+    }
+
+    private void RestoreCurrencies(EconomyData economy)
+    {
+        coins = Mathf.Max(0, economy.coins);
+        materials = Mathf.Max(0, economy.materials);
+        energy = Mathf.Max(0, economy.energy);
+        gems = Mathf.Max(0, economy.gems);
+    }
+
+    private void RefreshCurrencyHud()
+    {
+        SetHud(coinsHud, coins);
+        SetHud(materialsHud, materials);
+        SetHud(energyHud, energy);
+        SetHud(gemsHud, gems);
+    }
+
+    private void SetHud(TMP_Text target, int value)
+    {
+        if (target == null)
+            return;
+
+        string label = value.ToString();
+
+        if (target.text != label)
+            target.text = label;
+    }
+
+#if UNITY_EDITOR
+    private void BindCurrencyHud(TMP_Text text)
+    {
+        switch (text.transform.parent.name)
+        {
+            case "Coins":
+                coinsHud = text;
+                break;
+
+            case "Materials":
+                materialsHud = text;
+                break;
+
+            case "Energy":
+                energyHud = text;
+                break;
+
+            case "Gems":
+                gemsHud = text;
+                break;
+        }
+    }
+
+    private void ConfigureCurrencyHud()
+    {
+        ConfigureHudNumber(coinsHud, true);
+        ConfigureHudNumber(materialsHud, true);
+        ConfigureHudNumber(energyHud, true);
+        ConfigureHudNumber(gemsHud, true);
+    }
+#endif
+}
