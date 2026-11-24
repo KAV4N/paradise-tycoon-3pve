@@ -84,6 +84,7 @@ public class BuildingSystem : MonoBehaviour
 
     [Min(0)] public int reputation;
     [Min(0)] public int resortValue;
+    public ResortValueSystem resortValueSystem = new ResortValueSystem();
 
     [Header("Phase - wave controller calls SetWaveActive")]
     [Tooltip("True in WAVE_INCOMING, WAVE_ACTIVE, WAVE_PAUSED and WAVE_RESOLVING. " +
@@ -397,6 +398,7 @@ public class BuildingSystem : MonoBehaviour
         target.workers++;
         coins -= cost;
         paidHires++;
+        resortValueSystem.Add(ref resortValue, resortValueSystem.workerHireGain);
 
         NotifyWorkerChange();
         return true;
@@ -512,6 +514,7 @@ public class BuildingSystem : MonoBehaviour
 
         coins -= managerHireCost;
         b.hasManager = true;
+        resortValueSystem.Add(ref resortValue, resortValueSystem.managerHireGain);
 
         OnChanged?.Invoke();
         RefreshHud();
@@ -567,7 +570,7 @@ public class BuildingSystem : MonoBehaviour
         SetHud(energyHud, energy);
         SetHud(gemsHud, gems);
         SetHud(reputationHud, reputation);
-        SetHud(resortValueHud, resortValue);
+        resortValueSystem.RefreshHud(resortValueHud, resortValue);
     }
 
     // Detached data snapshot only. No file I/O, PlayerPrefs, JSON or Android storage code.
@@ -644,6 +647,7 @@ public class BuildingSystem : MonoBehaviour
         }
 
         paidHires = Mathf.Max(0, data.paidWorkerHires);
+        resortValueSystem.ClearReviewLabel();
 
         foreach (var b in buildings)
             SyncArt(b);
@@ -683,9 +687,19 @@ public class BuildingSystem : MonoBehaviour
         coins += Mathf.Max(0, coinGain);
         materials += Mathf.Max(0, materialGain);
         reputation += Mathf.Max(0, reputationGain);
-        resortValue += Mathf.Max(0, valueGain);
+        resortValueSystem.Add(ref resortValue, valueGain);
 
         OnChanged?.Invoke();
+        RefreshHud();
+        Refresh();
+    }
+
+    public void AddReviewResortValue(int valueGain)
+    {
+        resortValueSystem.AddReview(ref resortValue, valueGain);
+
+        OnChanged?.Invoke();
+        RefreshHud();
         Refresh();
     }
 
@@ -743,7 +757,7 @@ public class BuildingSystem : MonoBehaviour
         heading.text = b.displayName + (areaView ? " - Area Unlock" : "");
 
         balances.text =
-            $"Coins {coins}    Materials {materials}    Reputation {reputation}    Resort Value {resortValue}";
+            $"Coins {coins}    Materials {materials}    Reputation {reputation}    {resortValueSystem.BalanceText(resortValue)}";
 
         action.gameObject.SetActive(!waveActive && !(areaView && b.unlocked));
 
@@ -762,9 +776,7 @@ public class BuildingSystem : MonoBehaviour
                 (b.unlockCoins < 0
                     ? "Unlock price not configured"
                     : $"Cost: {b.unlockCoins} Coins") +
-                (b.unlockResortValueGain > 0
-                    ? $"\nResort Value: +{b.unlockResortValueGain}"
-                    : "");
+                resortValueSystem.UnlockPreview(b);
 
             status.text = UnlockState(b);
 
@@ -824,9 +836,7 @@ public class BuildingSystem : MonoBehaviour
                       : mats > 0
                           ? $" + {mats} Materials"
                           : "") +
-                  (Value(resortValueByLevel, b.level) > 0
-                      ? $"\nResort Value gain: +{Value(resortValueByLevel, b.level)}"
-                      : "");
+                  resortValueSystem.UpgradePreview(resortValueSystem.UpgradeGain(resortValueByLevel, b.level));
 
             status.text = !next
                 ? "Max level"
@@ -859,11 +869,11 @@ public class BuildingSystem : MonoBehaviour
         if (cost < 0 || mats < 0 || (b.level >= 3 && mats == 0) || coins < cost || materials < mats)
             return false;
 
-        int gain = Mathf.Max(0, Value(resortValueByLevel, b.level));
+        int gain = resortValueSystem.UpgradeGain(resortValueByLevel, b.level);
 
         coins -= cost;
         materials -= mats;
-        resortValue += gain;
+        resortValueSystem.Add(ref resortValue, gain);
         b.level++;
 
         SyncArt(b);
@@ -881,7 +891,7 @@ public class BuildingSystem : MonoBehaviour
 
         coins -= b.unlockCoins;
         b.unlocked = true;
-        resortValue += Mathf.Max(0, b.unlockResortValueGain);
+        resortValueSystem.Add(ref resortValue, resortValueSystem.UnlockGain(b));
 
         // A wave building comes with one Worker, placed on the new building. The Spa has no slots.
         if (!b.IsSpa && WorkerSlots(b) > 0)
@@ -1147,7 +1157,7 @@ public class BuildingSystem : MonoBehaviour
                 {
                     if (Value(upgradeCoinsByLevel, i) < 0 ||
                         Value(upgradeMaterialsByLevel, i) < 0 ||
-                        Value(resortValueByLevel, i) < 0)
+                        resortValueSystem.UpgradeGain(resortValueByLevel, i) < 0)
                     {
                         throw new InvalidOperationException(
                             b.id + ": missing cost for Lv" + (i + 1) +
