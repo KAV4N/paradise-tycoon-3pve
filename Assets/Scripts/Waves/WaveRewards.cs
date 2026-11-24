@@ -55,7 +55,22 @@ public sealed class WaveRatingRules
         return weights == 0 ? 100 : weighted / weights;
     }
 
-    // Plain threshold lookup (0..5). TODO (other task): clamp the worst result to 1 star.
+    // FR-028: the worst possible result of a wave is 1 star.
+    public const int MinimumStars = 1;
+
+    // Average satisfaction of the units of ONE need (served + still waiting). No units = 100.
+    // Used by the S5 recommendation to find the least satisfied need of the wave.
+    public double NeedSatisfaction(NeedSnapshot need)
+    {
+        Validate();
+        if (need == null) throw new ArgumentNullException(nameof(need));
+        double sum = 0; int count = 0;
+        foreach (double wait in need.WaitsBeforeService) { sum += Contribution(wait); count++; }
+        foreach (double wait in need.CurrentWaits) { sum += Contribution(wait); count++; }
+        return count == 0 ? 100 : sum / count;
+    }
+
+    // Threshold lookup, clamped to 1..5 stars (FR-028).
     public int Stars(double satisfaction)
     {
         Validate();
@@ -64,7 +79,7 @@ public sealed class WaveRatingRules
         int stars = 0;
         for (int i = 0; i < starThresholds.Length; i++)
             if (satisfaction >= starThresholds[i]) stars = i + 1;
-        return stars;
+        return Math.Max(MinimumStars, stars);
     }
 
     private void Accumulate(WaveSnapshot snapshot, out double weighted, out double weights)
