@@ -29,6 +29,7 @@ public class GameStateManager : MonoBehaviour
     private bool ready;
     // Data of the wave that just ended, kept until the player leaves S4 / S5.
     private WaveResult completedResult;
+    private bool completedRewardsClaimed;
     private WaveSnapshot completedSnapshot;
     private UpgradeOffer pendingOffer;
     private string pendingReason = "";
@@ -81,6 +82,7 @@ public class GameStateManager : MonoBehaviour
         catch (ArgumentException exception) { Debug.LogError("Wave configuration: " + exception.Message, this); return; }
         buildings.Close();
         completedResult = null; completedSnapshot = null;
+        completedRewardsClaimed = false;
         pendingOffer = null; pendingReason = "";
         waveUI.SetCustomerFeedback(null, null);
         incomingRemaining = Mathf.Max(0, incomingSeconds);
@@ -168,10 +170,17 @@ public class GameStateManager : MonoBehaviour
         automaticallyPaused = false;
         states.Resume();
     }
-    // S4 -> S5. Player pressed Continue on the Wave Complete screen.
+    // S4 -> S5. Coins and Reputation are credited only when Claim Rewards is pressed.
     private void ContinueFromWaveComplete()
     {
         if (!ready || State != GameState.WAVE_COMPLETE) return;
+        if (completedResult != null)
+        {
+            if (completedRewardsClaimed) return;
+            // Mark before wallet callbacks: repeated/reentrant clicks cannot pay twice.
+            completedRewardsClaimed = true;
+            buildings.AddRewards(completedResult.Coins, 0, completedResult.Reputation, 0);
+        }
         allComplete = waveNumber >= waveModel.Count;
         if (!allComplete) waveNumber++;
 

@@ -32,6 +32,8 @@ public sealed class WaveCompleteUI : MonoBehaviour
     [SerializeField] private Image satisfactionFill;
 
     [Header("Rewards")]
+    [SerializeField] private TMP_Text coinsText;
+    [SerializeField] private TMP_Text reputationText;
     [SerializeField] private TMP_Text energyText;         // "+1"
     [SerializeField] private TMP_Text materialsText;      // optional, "+2"
     [Tooltip("Optional. Hidden when the wave gave 0 Materials.")]
@@ -52,7 +54,8 @@ public sealed class WaveCompleteUI : MonoBehaviour
             Bind();
             return root != null && continueButton != null && starImages != null && starImages.Length == 5 &&
                    Array.TrueForAll(starImages, s => s != null) &&
-                   guestsServedText != null && satisfactionText != null && energyText != null;
+                   guestsServedText != null && satisfactionText != null && energyText != null &&
+                   coinsText != null && reputationText != null;
         }
     }
 
@@ -68,7 +71,12 @@ public sealed class WaveCompleteUI : MonoBehaviour
     {
         if (bound || continueButton == null) return;
         bound = true;
-        continueAction = () => ContinueRequested?.Invoke();
+        continueAction = () =>
+        {
+            if (!continueButton.interactable) return;
+            continueButton.interactable = false;
+            ContinueRequested?.Invoke();
+        };
         continueButton.onClick.AddListener(continueAction);
     }
 
@@ -86,8 +94,11 @@ public sealed class WaveCompleteUI : MonoBehaviour
         if (satisfactionFill != null) satisfactionFill.fillAmount = Mathf.Clamp01((float)(result.Satisfaction / 100.0));
 
         energyText.text = $"+{result.Energy}";
+        coinsText.text = $"+{result.Coins}";
+        reputationText.text = $"+{result.Reputation}";
         if (materialsText != null) materialsText.text = $"+{result.Materials}";
         if (materialsRow != null) materialsRow.SetActive(result.Materials > 0);
+        continueButton.interactable = true;
 
         root.SetActive(true);
     }
