@@ -25,6 +25,13 @@ public sealed class WaveRewardsComponent : MonoBehaviour
         return rating.EvaluateLive(snapshot);
     }
 
+    // Average satisfaction (0-100) of one need of a wave. Used by the S5 investment recommendation.
+    public double EvaluateNeed(NeedSnapshot need)
+    {
+        ValidateConfiguration();
+        return rating.NeedSatisfaction(need);
+    }
+
     // Final evaluation after the wave ends. Computed and logged once per wave;
     // calling it again for the same wave returns the cached result without logging.
     public WaveResult Prepare(WaveSnapshot completed)

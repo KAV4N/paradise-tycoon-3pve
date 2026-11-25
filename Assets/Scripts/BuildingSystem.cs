@@ -830,7 +830,8 @@ public partial class BuildingSystem : MonoBehaviour
                 coins >= cost &&
                 materials >= mats;
 
-            actionLabel.text = "Upgrade Now";
+            // Previous Upgrade Now (don't change this)
+            actionLabel.text = "";
         }
     }
 
@@ -942,6 +943,8 @@ public partial class BuildingSystem : MonoBehaviour
             TMP_Text closeLabel;
             closeButton = Button("Later / Close", 0.08f, 0.08f, 0.47f, 0.18f, out closeLabel);
 
+            LayoutPanel();
+
             overlay.SetActive(false);
         }
 
@@ -956,7 +959,7 @@ public partial class BuildingSystem : MonoBehaviour
                 DestroyImmediate(staleButton.gameObject);
         }
 
-        LayoutPanel();
+        // LayoutPanel();
     }
 
     // Single place that defines the panel layout, so it also fixes panels created earlier.
