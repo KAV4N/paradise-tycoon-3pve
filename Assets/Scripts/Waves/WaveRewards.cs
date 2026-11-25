@@ -109,11 +109,28 @@ public sealed class WaveRatingRules
 public sealed class WaveRewardRules
 {
     public int energyPerCompletedWave = 1;
+    // Build document 4.8: per served need unit; 1-5 stars, then Perfect.
+    public int coinsPerUnit = 16;
+    public double[] coinsRatingMultipliers = { 0.4, 0.6, 0.8, 1.0, 1.2, 1.3 };
     // TODO (Materials task): materials roll for 4+ stars.
     public void Validate()
     {
         if (energyPerCompletedWave < 1)
             throw new ArgumentOutOfRangeException(nameof(energyPerCompletedWave), "Completed waves must award positive Energy.");
+        if (coinsPerUnit < 1 || coinsRatingMultipliers == null || coinsRatingMultipliers.Length != 6)
+            throw new ArgumentException("Configure Coins per unit and six rating multipliers (1-5 stars, Perfect).");
+        foreach (double multiplier in coinsRatingMultipliers)
+            if (double.IsNaN(multiplier) || double.IsInfinity(multiplier) || multiplier <= 0)
+                throw new ArgumentException("Coins multipliers must be finite and positive.");
+    }
+
+    public int CalculateCoins(int units, int stars, bool perfect)
+    {
+        Validate();
+        if (units < 0 || stars < 0 || stars > 5) throw new ArgumentOutOfRangeException();
+        int tier = perfect ? 5 : Math.Max(1, stars) - 1;
+        double amount = units * (double)coinsPerUnit * coinsRatingMultipliers[tier];
+        return (int)Math.Min(int.MaxValue, Math.Round(amount, MidpointRounding.AwayFromZero));
     }
 
     public WaveResult Create(WaveSnapshot snapshot, WaveRatingRules rating)
@@ -122,7 +139,8 @@ public sealed class WaveRewardRules
         if (rating == null) throw new ArgumentNullException(nameof(rating));
         double satisfaction = rating.Evaluate(snapshot);
         int stars = rating.Stars(satisfaction);
-        return new WaveResult(snapshot.Number, snapshot.Customers, satisfaction, stars, energyPerCompletedWave, 0);
+        return new WaveResult(snapshot.Number, snapshot.Customers, satisfaction, stars, energyPerCompletedWave, 0,
+            CalculateCoins(snapshot.Completed, stars, satisfaction >= 100), Math.Max(1, stars));
     }
 }
 
@@ -135,10 +153,14 @@ public sealed class WaveResult
     public int Stars { get; }
     public int Energy { get; }     
     public int Materials { get; }  
+    public int Coins { get; }
+    public int Reputation { get; }
     public bool Perfect => Satisfaction >= 100;
-    internal WaveResult(int number, int customers, double satisfaction, int stars, int energy, int materials)
+    internal WaveResult(int number, int customers, double satisfaction, int stars, int energy, int materials,
+        int coins, int reputation)
     {
         WaveNumber = number; Customers = customers; Satisfaction = satisfaction;
         Stars = stars; Energy = energy; Materials = materials;
+        Coins = coins; Reputation = reputation;
     }
 }
