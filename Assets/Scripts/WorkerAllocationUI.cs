@@ -12,6 +12,7 @@ public sealed class WorkerAllocationUI : MonoBehaviour
     [Header("Model")]
     [Tooltip("Leave empty to find BuildingSystem automatically.")]
     [SerializeField] private BuildingSystem buildingSystem;
+    [SerializeField] private GameStateManager gameStateManager;
 
     [Header("Your S3 Panel")]
     [Tooltip("The Panel you created for S3. It is hidden at start and shown when S3 opens.")]
@@ -70,6 +71,7 @@ public sealed class WorkerAllocationUI : MonoBehaviour
 
         buildingSystem.OnWorkerAllocationRequested += Open;
         buildingSystem.OnChanged += OnModelChanged;
+        if (gameStateManager != null) gameStateManager.StateChanged += OnWaveStateChanged;
 
         if (openButton != null) openButton.onClick.AddListener(OpenFromButton);
         if (closeButton != null) closeButton.onClick.AddListener(Close);
@@ -85,6 +87,7 @@ public sealed class WorkerAllocationUI : MonoBehaviour
 
         if (openButton != null) openButton.onClick.RemoveListener(OpenFromButton);
         if (closeButton != null) closeButton.onClick.RemoveListener(Close);
+        if (gameStateManager != null) gameStateManager.StateChanged -= OnWaveStateChanged;
     }
 
     private void OpenFromButton() => Open(null);
@@ -109,6 +112,16 @@ public sealed class WorkerAllocationUI : MonoBehaviour
     {
         if (CanvasVisible)
             Rebuild();
+    }
+
+    private bool CanShop => gameStateManager != null && !buildingSystem.waveActive &&
+        (gameStateManager.State == GameState.AWAITING_WAVE || gameStateManager.State == GameState.UPGRADE);
+
+    private void OnWaveStateChanged(GameState state)
+    {
+        if (state == GameState.WAVE_INCOMING || state == GameState.WAVE_RESOLVING || state == GameState.WAVE_COMPLETE)
+            Close();
+        else if (CanvasVisible) Rebuild();
     }
 
     private void OnRowClicked(BuildingSystem.Building b)
@@ -140,7 +153,7 @@ public sealed class WorkerAllocationUI : MonoBehaviour
             return;
 
         foreach (var r in rows)
-            if (r != null) Destroy(r.gameObject);
+            if (r != null) { r.gameObject.SetActive(false); Destroy(r.gameObject); }
 
         rows.Clear();
 
@@ -156,10 +169,10 @@ public sealed class WorkerAllocationUI : MonoBehaviour
         }
 
         if (titleText != null)
-            titleText.text = "WORKER ALLOCATION";
+            titleText.text = CanShop ? "STAFF - HIRE & ASSIGN" : "WORKER ALLOCATION";
 
         if (summaryText != null)
-            summaryText.text = $"Workers: {buildingSystem.TotalWorkers}   |   Worker slots: {buildingSystem.TotalWorkerSlots()}";
+            summaryText.text = $"Coins: {buildingSystem.coins:N0}   |   Workers: {buildingSystem.TotalWorkers}/{buildingSystem.WorkerCap()}   |   Slots: {buildingSystem.TotalWorkerSlots()}";
 
         if (hintText != null)
             hintText.text = source == null ? pickHint : string.Format(moveHint, source.displayName);
@@ -169,15 +182,15 @@ public sealed class WorkerAllocationUI : MonoBehaviour
     {
         int workers = buildingSystem.GetWorkerCount(b);
         int slots = buildingSystem.WorkerSlots(b);
-        int percent = Mathf.RoundToInt(buildingSystem.Utilization(b) * 100f);
+        int percent = Mathf.RoundToInt(buildingSystem.ServiceMultiplier(b) * 100f);
 
         bool isSource = source == b;
         bool canReceive = source != null && !isSource && buildingSystem.CanAddWorker(b);
         bool canPick = source == null && workers > 0;
 
         if (row.nameText != null) row.nameText.text = $"{b.displayName} (Lv {b.level})";
-        if (row.countText != null) row.countText.text = $"{workers}/{slots}";
-        if (row.speedText != null) row.speedText.text = $"{percent}%";
+        if (row.countText != null) row.countText.text = $"Workers {workers}/{slots}";
+        if (row.speedText != null) row.speedText.text = $"Service {percent}%";
 
         if (row.actionText != null)
         {
@@ -197,5 +210,64 @@ public sealed class WorkerAllocationUI : MonoBehaviour
             var captured = b;
             row.button.onClick.AddListener(() => OnRowClicked(captured));
         }
+        FillHiring(row, b);
+    }
+
+    private void FillHiring(WorkerAllocationRow row, BuildingSystem.Building b)
+    {
+        bool capped = buildingSystem.TotalWorkers >= buildingSystem.WorkerCap();
+        bool freeSlot = buildingSystem.HasFreeWorkerSlot(b);
+        string workerReason = "Hiring available between waves";
+        string managerReason = "Hiring available between waves";
+        bool workerAllowed = CanShop && buildingSystem.CanHireWorker(b, out workerReason);
+        bool managerAllowed = CanShop && buildingSystem.CanHireManager(b, out managerReason);
+        bool workerOffer = CanShop && !capped && freeSlot;
+        bool managerOffer = CanShop && !b.hasManager;
+
+        if (row.hireWorkerButton != null)
+        {
+            row.hireWorkerButton.gameObject.SetActive(workerOffer);
+            row.hireWorkerButton.interactable = workerAllowed;
+            row.hireWorkerButton.onClick.AddListener(() => Hire(b, false));
+        }
+        if (row.hireWorkerText != null)
+        {
+            float nextUtilization = b.workers == 0 ? 1f : buildingSystem.Utilization(b) +
+                (b.workers == 1 ? buildingSystem.utilizationSecond : buildingSystem.utilizationThird);
+            int after = Mathf.RoundToInt(nextUtilization * buildingSystem.ManagerMultiplier(b) * 100f);
+            row.hireWorkerText.text = $"Hire Worker - {buildingSystem.NextWorkerHireCost():N0} Coins\n" +
+                (workerAllowed ? $"Service {Mathf.RoundToInt(buildingSystem.ServiceMultiplier(b) * 100f)}% -> {after}%" : workerReason);
+        }
+        if (row.workerUnavailableText != null)
+        {
+            row.workerUnavailableText.gameObject.SetActive(!workerOffer);
+            row.workerUnavailableText.text = !CanShop ? "Hire Workers between waves" :
+                capped ? "Upgrade buildings to open more shifts" : "No free Worker slot";
+        }
+
+        string managerTitle = buildingSystem.ManagerTitle(b);
+        string multiplier = buildingSystem.managerMultiplier.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+        if (row.hireManagerButton != null)
+        {
+            row.hireManagerButton.gameObject.SetActive(managerOffer);
+            row.hireManagerButton.interactable = managerAllowed;
+            row.hireManagerButton.onClick.AddListener(() => Hire(b, true));
+        }
+        if (row.hireManagerText != null)
+            row.hireManagerText.text = $"Hire {managerTitle} - {buildingSystem.managerHireCost:N0} Coins\n" +
+                (managerAllowed ? $"Service x{multiplier} on every seat" : managerReason);
+        if (row.managerUnavailableText != null)
+        {
+            row.managerUnavailableText.gameObject.SetActive(!managerOffer);
+            row.managerUnavailableText.text = b.hasManager ? $"{managerTitle} hired - Service x{multiplier}" : "Hire Managers between waves";
+        }
+    }
+
+    private void Hire(BuildingSystem.Building b, bool manager)
+    {
+        if (!CanShop) { Rebuild(); return; }
+        source = null;
+        bool hired = manager ? buildingSystem.TryHireManager(b) : buildingSystem.TryHireWorker(b);
+        if (!hired) Rebuild(); // Successful purchases refresh through OnChanged.
     }
 }

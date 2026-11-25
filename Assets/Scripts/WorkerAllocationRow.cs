@@ -14,4 +14,12 @@ public sealed class WorkerAllocationRow : MonoBehaviour
     public TMP_Text countText;      // "2/3"
     public TMP_Text speedText;      // "73%"
     public TMP_Text actionText;     // "PICK" / "MOVE HERE" / "FROM (cancel)" / "FULL"
+
+    [Header("Hiring - authored in the row prefab")]
+    public Button hireWorkerButton;
+    public TMP_Text hireWorkerText;
+    public TMP_Text workerUnavailableText;
+    public Button hireManagerButton;
+    public TMP_Text hireManagerText;
+    public TMP_Text managerUnavailableText;
 }
