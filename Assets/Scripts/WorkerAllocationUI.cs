@@ -33,11 +33,36 @@ public sealed class WorkerAllocationUI : MonoBehaviour
     [SerializeField] private Color targetColor = new Color(0.12f, 0.45f, 0.30f);
 
     [Header("Texts")]
-    [SerializeField] private string pickHint = "Tap a building with Workers, then tap where the Worker should go.";
     [SerializeField] private string moveHint = "Moving a Worker from {0}. Tap a building with a free slot (or the same one to cancel).";
 
     private readonly List<WorkerAllocationRow> rows = new List<WorkerAllocationRow>();
     private BuildingSystem.Building source;
+    private BuildingSystem.Building lastFrom, lastTo;
+    private float feedbackUntil;
+    private bool moving;
+
+    private void Update()
+    {
+        if (feedbackUntil <= 0 || Time.unscaledTime < feedbackUntil) return;
+        feedbackUntil = 0;
+        lastFrom = lastTo = null;
+        if (CanvasVisible) Rebuild();
+    }
+
+    private int PreviewPercent(BuildingSystem.Building b, int workers)
+    {
+        float utilization = workers <= 0 ? buildingSystem.utilizationEmpty :
+            1f + (workers >= 2 ? buildingSystem.utilizationSecond : 0f) +
+            (workers >= 3 ? buildingSystem.utilizationThird : 0f);
+        return Mathf.RoundToInt(utilization * buildingSystem.ManagerMultiplier(b) * 100f);
+    }
+
+    private void ShowPreview(WorkerAllocationRow row, BuildingSystem.Building b, int delta)
+    {
+        int workers = buildingSystem.GetWorkerCount(b);
+        if (row.countText != null) row.countText.text = $"Workers {workers} -> {workers + delta}";
+        if (row.speedText != null) row.speedText.text = $"Service {PreviewPercent(b, workers)}% -> {PreviewPercent(b, workers + delta)}%";
+    }
 
     private void Awake()
     {
@@ -95,6 +120,8 @@ public sealed class WorkerAllocationUI : MonoBehaviour
     // Called by the HUD button (null) or by a building tap during a wave (that building is preselected).
     public void Open(BuildingSystem.Building preselected)
     {
+        feedbackUntil = 0;
+        lastFrom = lastTo = null;
         source = preselected != null && buildingSystem.GetWorkerCount(preselected) > 0 ? preselected : null;
 
         SetCanvasVisible(true);
@@ -110,7 +137,7 @@ public sealed class WorkerAllocationUI : MonoBehaviour
 
     private void OnModelChanged()
     {
-        if (CanvasVisible)
+        if (CanvasVisible && !moving)
             Rebuild();
     }
 
@@ -126,24 +153,29 @@ public sealed class WorkerAllocationUI : MonoBehaviour
 
     private void OnRowClicked(BuildingSystem.Building b)
     {
+        feedbackUntil = 0;
+        lastFrom = lastTo = null;
         if (source == null)
         {
-            if (buildingSystem.GetWorkerCount(b) > 0)
-                source = b;
+            if (buildingSystem.GetWorkerCount(b) > 0) source = b;
         }
-        else if (source == b)
+        else if (source == b) source = null;
+        else
         {
-            source = null; // cancel
+            var from = source;
+            bool moved;
+            moving = true;
+            try { moved = buildingSystem.TryMoveWorker(from, b); }
+            finally { moving = false; }
+            if (moved)
+            {
+                lastFrom = from;
+                lastTo = b;
+                feedbackUntil = Time.unscaledTime + 2.5f;
+                source = null;
+            }
+            else if (buildingSystem.GetWorkerCount(b) > 0) source = b;
         }
-        else if (buildingSystem.TryMoveWorker(source, b))
-        {
-            source = null; // moved, OnChanged already refreshed the wave speed
-        }
-        else if (buildingSystem.GetWorkerCount(b) > 0)
-        {
-            source = b; // target was full: treat as picking a new source
-        }
-
         Rebuild();
     }
 
@@ -175,7 +207,9 @@ public sealed class WorkerAllocationUI : MonoBehaviour
             summaryText.text = $"Coins: {buildingSystem.coins:N0}   |   Workers: {buildingSystem.TotalWorkers}/{buildingSystem.WorkerCap()}   |   Slots: {buildingSystem.TotalWorkerSlots()}";
 
         if (hintText != null)
-            hintText.text = source == null ? pickHint : string.Format(moveHint, source.displayName);
+            hintText.text = lastFrom != null && lastTo != null
+                ? $"Worker moved: {lastFrom.displayName} -> {lastTo.displayName}"
+                : source == null ? string.Empty : string.Format(moveHint, source.displayName);
     }
 
     private void Fill(WorkerAllocationRow row, BuildingSystem.Building b)
@@ -195,14 +229,31 @@ public sealed class WorkerAllocationUI : MonoBehaviour
         if (row.actionText != null)
         {
             row.actionText.text =
-                isSource ? "FROM (cancel)" :
+                isSource ? "CANCEL MOVE" :
                 canReceive ? "MOVE HERE" :
                 canPick ? "PICK" :
-                source != null && !buildingSystem.CanAddWorker(b) ? "FULL" : "";
+                source != null && !buildingSystem.CanAddWorker(b) ? "NO FREE SLOT" : "";
         }
 
-        // if (row.background != null)
-            // row.background.color = isSource ? sourceColor : canReceive ? targetColor : normalColor;
+        bool full = source != null && !isSource && !canReceive;
+        if (row.rowImage != null)
+            row.rowImage.color = full ? new Color(0.07f, 0.12f, 0.14f, 0.95f) : normalColor;
+        if (row.selectionOutline != null)
+        {
+            row.selectionOutline.enabled = isSource || canReceive;
+            row.selectionOutline.effectColor = isSource ? sourceColor : targetColor;
+        }
+        if (isSource) ShowPreview(row, b, -1);
+        row.hoverChanged = hovered =>
+        {
+            if (!canReceive || row == null) return;
+            if (hovered) ShowPreview(row, b, 1);
+            else
+            {
+                if (row.countText != null) row.countText.text = $"Workers {workers}/{slots}";
+                if (row.speedText != null) row.speedText.text = $"Service {percent}%";
+            }
+        };
 
         if (row.button != null)
         {
@@ -267,6 +318,8 @@ public sealed class WorkerAllocationUI : MonoBehaviour
     {
         if (!CanShop) { Rebuild(); return; }
         source = null;
+        feedbackUntil = 0;
+        lastFrom = lastTo = null;
         bool hired = manager ? buildingSystem.TryHireManager(b) : buildingSystem.TryHireWorker(b);
         if (!hired) Rebuild(); // Successful purchases refresh through OnChanged.
     }
