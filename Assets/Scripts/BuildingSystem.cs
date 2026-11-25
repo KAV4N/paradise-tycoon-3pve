@@ -766,7 +766,7 @@ public partial class BuildingSystem : MonoBehaviour
                 b.unlockCoins >= 0 &&
                 coins >= b.unlockCoins;
 
-            actionLabel.text = "Unlock";
+            actionLabel.text = ""; // The button caption is provided by the authored UI artwork.
         }
         else
         {
