@@ -48,6 +48,7 @@ public class WaveUIController : MonoBehaviour
     [SerializeField] private TextMeshProUGUI feedbackQuoteText;
 
     private Dictionary<NeedType, NeedItemUI> activeNeedItems = new Dictionary<NeedType, NeedItemUI>();
+    private readonly Dictionary<NeedType, NeedStatus> needStatuses = new Dictionary<NeedType, NeedStatus>();
     private HashSet<NeedType> unlockedNeeds = new HashSet<NeedType>();
     private bool isWaveInProgress = false;
     public bool IsWaveInProgress => isWaveInProgress;
@@ -114,7 +115,7 @@ public class WaveUIController : MonoBehaviour
         if (startWaveButtonTexture != null)
         {
             // startWaveButtonTexture.color = inProgress ? new Color(0.45f, 0.45f, 0.45f, 1f) : Color.white;
-            startWaveButtonTexture.enabled = !startWaveButtonTexture.enabled;
+            startWaveButtonTexture.enabled = true;
         }
 
         // 2. Stavový indikátor (nie tlačidlo)
@@ -184,6 +185,7 @@ public class WaveUIController : MonoBehaviour
                 {
                     string displayName = string.IsNullOrEmpty(config.displayName) ? needType.ToString() : config.displayName;
                     itemUI.Setup(needType, config.icon, displayName);
+                    if (needStatuses.TryGetValue(needType, out var status)) itemUI.SetStatus(status);
                     activeNeedItems[needType] = itemUI;
                 }
             }
@@ -231,6 +233,8 @@ public class WaveUIController : MonoBehaviour
     public void ApplyGameState(GameState state, int wave, bool allComplete)
     {
         presentationState = state;
+        if (waveStatusIndicatorContainer != null)
+            waveStatusIndicatorContainer.SetActive(state != GameState.AWAITING_WAVE || allComplete);
         if (startWaveButton != null)
             startWaveButton.gameObject.SetActive(state == GameState.AWAITING_WAVE && !allComplete);
         SetWaveState(state == GameState.WAVE_ACTIVE || state == GameState.WAVE_PAUSED);
@@ -255,6 +259,40 @@ public class WaveUIController : MonoBehaviour
         EnsureFlowButton();
         // flowCanvas.SetActive(state == GameState.WAVE_INCOMING || state == GameState.WAVE_ACTIVE || state == GameState.WAVE_PAUSED);
         // flowLabel.text = state == GameState.WAVE_PAUSED ? "Resume" : "Pause";
+    }
+
+    public void SetNeedStatus(NeedType need, NeedStatus status)
+    {
+        needStatuses[need] = status;
+        if (activeNeedItems.TryGetValue(need, out var item)) item.SetStatus(status);
+    }
+
+    public void ResetNeedStatuses()
+    {
+        needStatuses.Clear();
+        foreach (var item in activeNeedItems.Values) item.SetStatus(NeedStatus.OK);
+        SetCustomerFeedback(null, null);
+    }
+
+    public static string NeedStatusMessage(NeedType need, NeedStatus status)
+    {
+        string service;
+        switch (need)
+        {
+            case NeedType.Rooms: service = "Reception"; break;
+            case NeedType.Drinks: service = "Beach Bar"; break;
+            case NeedType.Food: service = "Restaurant"; break;
+            case NeedType.Relax: service = "Pool"; break;
+            case NeedType.OceanView: service = "Bungalows"; break;
+            default: service = need.ToString(); break;
+        }
+        switch (status)
+        {
+            case NeedStatus.BOTTLENECK: return service + " queue growing";
+            case NeedStatus.RECOVERING: return service + " is catching up";
+            case NeedStatus.SATISFIED: return service + ": all guests served";
+            default: return string.Empty;
+        }
     }
 
     public void RenderWave(WaveSnapshot snapshot, bool rebuild)
@@ -315,7 +353,11 @@ public class WaveUIController : MonoBehaviour
 
         if (hasQuote)
         {
-            if (customerPortrait != null) customerPortrait.sprite = portrait;
+            if (customerPortrait != null)
+            {
+                customerPortrait.sprite = portrait;
+                customerPortrait.gameObject.SetActive(portrait != null);
+            }
             if (feedbackQuoteText != null) feedbackQuoteText.text = $"\"{quote}\"";
         }
     }

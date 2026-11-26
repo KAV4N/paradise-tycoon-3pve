@@ -17,6 +17,8 @@ public class ServiceQueue
     private int arrived, inService, completed;
     private double multiplier = 1;
     public bool IsComplete => elapsed >= arrivalSeconds && completed == total;
+    public double FillRate => seats.Length * multiplier / serviceSeconds;
+    public double ArrivalRate => elapsed < arrivalSeconds ? total / arrivalSeconds : 0;
     public double SpeedMultiplier
     {
         get => multiplier;
@@ -64,8 +66,17 @@ public class ServiceQueue
                 }
         }
     }
-    public NeedSnapshot Snapshot() => new NeedSnapshot(type, total, arrived, waiting.Count,
-        inService, completed, TrackWaitingTime && waiting.Count > 0 ? Math.Max(0, elapsed - waiting.Peek()) : 0,
-        waits.ToArray(), (double[])seats.Clone(), TrackWaitingTime);
-}
 
+    public NeedSnapshot Snapshot()
+    {
+        // Wait so far of everyone still in the queue; needed for live satisfaction.
+        var currentWaits = new List<double>(waiting.Count);
+        if (TrackWaitingTime)
+            foreach (double arrival in waiting)
+                currentWaits.Add(Math.Max(0, elapsed - arrival));
+
+        return new NeedSnapshot(type, total, arrived, waiting.Count, inService, completed,
+            TrackWaitingTime && waiting.Count > 0 ? Math.Max(0, elapsed - waiting.Peek()) : 0,
+            waits.ToArray(), (double[])seats.Clone(), TrackWaitingTime, currentWaits.ToArray());
+    }
+}

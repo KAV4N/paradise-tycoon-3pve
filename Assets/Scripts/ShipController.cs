@@ -7,7 +7,7 @@ public class ShipController : MonoBehaviour
     [SerializeField] private Sprite fullSprite;     // ship with customers (arriving and leaving)
     [SerializeField] private Sprite emptySprite;    // ship after all customers got out (waiting at dock)
     [SerializeField] private string sortingLayer = "Default";
-    [SerializeField] private int sortingOrder = 5;
+    [SerializeField] private int sortingOrder = 2;
 
     [Header("Coordinates (world space)")]
     [SerializeField] private Vector2 spawnPosition = new Vector2(-10f, 0f); // where the ship appears
@@ -60,6 +60,7 @@ public class ShipController : MonoBehaviour
         shipRenderer.sortingLayerName = sortingLayer;
         shipRenderer.sortingOrder = sortingOrder;
         ship = go.transform;
+        ship.localScale = new Vector3(0.75f, 0.75f, 0.75f);
     }
 
     private void ShowSprite(Sprite sprite)

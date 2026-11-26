@@ -1,0 +1,166 @@
+using System;
+
+// Build document 4.4 / 4.6 / 5.6. Pure data and calculations, reusable without a scene.
+[Serializable]
+public sealed class WaveRatingRules
+{
+    public double patienceGrace = 10;
+    public double patienceFloorAfter = 30;
+    public double unitFloor = 25;
+    public double oceanViewWeight = 1.5;
+    public double[] starThresholds = { 40, 55, 70, 80, 90 };
+
+    public void Validate()
+    {
+        if (!Finite(patienceGrace) || !Finite(patienceFloorAfter) || patienceGrace < 0 || patienceFloorAfter <= patienceGrace ||
+            !Finite(unitFloor) || unitFloor < 0 || unitFloor > 100 ||
+            !Finite(oceanViewWeight) || oceanViewWeight < 1 || starThresholds == null || starThresholds.Length != 5)
+            throw new ArgumentException("Invalid wave satisfaction tuning.");
+        for (int i = 0; i < starThresholds.Length; i++)
+            if (!Finite(starThresholds[i]) || starThresholds[i] < 0 || starThresholds[i] > 100 ||
+                (i > 0 && starThresholds[i] <= starThresholds[i - 1]))
+                throw new ArgumentException("Configure five increasing star thresholds between 0 and 100.");
+    }
+
+    // Satisfaction of one unit: 100 within the grace period, then a linear fall to unitFloor.
+    public double Contribution(double wait)
+    {
+        if (!Finite(wait) || wait < 0) throw new ArgumentOutOfRangeException(nameof(wait));
+        if (wait <= patienceGrace) return 100;
+        double t = Math.Min(1, (wait - patienceGrace) / (patienceFloorAfter - patienceGrace));
+        return 100 + (unitFloor - 100) * t;
+    }
+
+    // Final rating of a completed wave: weighted average over every unit's wait before service.
+    public double Evaluate(WaveSnapshot snapshot)
+    {
+        Validate();
+        if (snapshot == null || !snapshot.IsComplete || snapshot.Total == 0)
+            throw new ArgumentException("Only a completed, nonempty wave can receive a rating.");
+        foreach (var need in snapshot.Needs)
+            if (!need.TracksWaitingTime || need.WaitsBeforeService.Count != need.Total)
+                throw new ArgumentException("A completed wave must include every unit's waiting history.");
+
+        Accumulate(snapshot, out double weighted, out double weights);
+        return weighted / weights;
+    }
+
+    // Running satisfaction during a wave: served units (final wait) + units still waiting (wait so far).
+    // Units that have not arrived yet are not counted. No customers yet = 100.
+    public double EvaluateLive(WaveSnapshot partial)
+    {
+        Validate();
+        if (partial == null) throw new ArgumentNullException(nameof(partial));
+        Accumulate(partial, out double weighted, out double weights);
+        return weights == 0 ? 100 : weighted / weights;
+    }
+
+    // FR-028: the worst possible result of a wave is 1 star.
+    public const int MinimumStars = 1;
+
+    // Average satisfaction of the units of ONE need (served + still waiting). No units = 100.
+    // Used by the S5 recommendation to find the least satisfied need of the wave.
+    public double NeedSatisfaction(NeedSnapshot need)
+    {
+        Validate();
+        if (need == null) throw new ArgumentNullException(nameof(need));
+        double sum = 0; int count = 0;
+        foreach (double wait in need.WaitsBeforeService) { sum += Contribution(wait); count++; }
+        foreach (double wait in need.CurrentWaits) { sum += Contribution(wait); count++; }
+        return count == 0 ? 100 : sum / count;
+    }
+
+    // Threshold lookup, clamped to 1..5 stars (FR-028).
+    public int Stars(double satisfaction)
+    {
+        Validate();
+        if (!Finite(satisfaction) || satisfaction < 0 || satisfaction > 100)
+            throw new ArgumentOutOfRangeException(nameof(satisfaction));
+        int stars = 0;
+        for (int i = 0; i < starThresholds.Length; i++)
+            if (satisfaction >= starThresholds[i]) stars = i + 1;
+        return Math.Max(MinimumStars, stars);
+    }
+
+    private void Accumulate(WaveSnapshot snapshot, out double weighted, out double weights)
+    {
+        weighted = 0; weights = 0;
+        foreach (var need in snapshot.Needs)
+        {
+            if (!need.TracksWaitingTime) continue;
+            double weight = need.Type == NeedType.OceanView ? oceanViewWeight : 1;
+            foreach (double wait in need.WaitsBeforeService)
+            {
+                weighted += Contribution(wait) * weight;
+                weights += weight;
+            }
+            foreach (double wait in need.CurrentWaits)
+            {
+                weighted += Contribution(wait) * weight;
+                weights += weight;
+            }
+        }
+    }
+
+    private static bool Finite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
+}
+
+[Serializable]
+public sealed class WaveRewardRules
+{
+    public int energyPerCompletedWave = 1;
+    // Build document 4.8: per served need unit; 1-5 stars, then Perfect.
+    public int coinsPerUnit = 16;
+    public double[] coinsRatingMultipliers = { 0.4, 0.6, 0.8, 1.0, 1.2, 1.3 };
+    // TODO (Materials task): materials roll for 4+ stars.
+    public void Validate()
+    {
+        if (energyPerCompletedWave < 1)
+            throw new ArgumentOutOfRangeException(nameof(energyPerCompletedWave), "Completed waves must award positive Energy.");
+        if (coinsPerUnit < 1 || coinsRatingMultipliers == null || coinsRatingMultipliers.Length != 6)
+            throw new ArgumentException("Configure Coins per unit and six rating multipliers (1-5 stars, Perfect).");
+        foreach (double multiplier in coinsRatingMultipliers)
+            if (double.IsNaN(multiplier) || double.IsInfinity(multiplier) || multiplier <= 0)
+                throw new ArgumentException("Coins multipliers must be finite and positive.");
+    }
+
+    public int CalculateCoins(int units, int stars, bool perfect)
+    {
+        Validate();
+        if (units < 0 || stars < 0 || stars > 5) throw new ArgumentOutOfRangeException();
+        int tier = perfect ? 5 : Math.Max(1, stars) - 1;
+        double amount = units * (double)coinsPerUnit * coinsRatingMultipliers[tier];
+        return (int)Math.Min(int.MaxValue, Math.Round(amount, MidpointRounding.AwayFromZero));
+    }
+
+    public WaveResult Create(WaveSnapshot snapshot, WaveRatingRules rating)
+    {
+        Validate();
+        if (rating == null) throw new ArgumentNullException(nameof(rating));
+        double satisfaction = rating.Evaluate(snapshot);
+        int stars = rating.Stars(satisfaction);
+        return new WaveResult(snapshot.Number, snapshot.Customers, satisfaction, stars, energyPerCompletedWave, 0,
+            CalculateCoins(snapshot.Completed, stars, satisfaction >= 100), Math.Max(1, stars));
+    }
+}
+
+[Serializable]
+public sealed class WaveResult
+{
+    public int WaveNumber { get; }
+    public int Customers { get; }
+    public double Satisfaction { get; }
+    public int Stars { get; }
+    public int Energy { get; }     
+    public int Materials { get; }  
+    public int Coins { get; }
+    public int Reputation { get; }
+    public bool Perfect => Satisfaction >= 100;
+    internal WaveResult(int number, int customers, double satisfaction, int stars, int energy, int materials,
+        int coins, int reputation)
+    {
+        WaveNumber = number; Customers = customers; Satisfaction = satisfaction;
+        Stars = stars; Energy = energy; Materials = materials;
+        Coins = coins; Reputation = reputation;
+    }
+}

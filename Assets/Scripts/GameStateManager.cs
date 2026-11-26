@@ -5,20 +5,34 @@ using UnityEngine;
 public class GameStateManager : MonoBehaviour
 {
     [SerializeField] private GameData game_data;
-    [SerializeField] private MvpBuildingSystem buildings;
+    [SerializeField] private BuildingSystem buildings;
     [SerializeField] private WaveUIController waveUI;
     [Header("Scene components - drag the task objects here")]
     [SerializeField] private WaveModelComponent waveModel;
     [SerializeField] private WaveStatesComponent states;
     [SerializeField] private WaveServicesComponent services;
+    [Header("Next wave forecast")]
+    [SerializeField] private WavePreparationUI preparationUI;
     [Header("Ship")]
     [SerializeField] private ShipController ship; // SHIP: optional, drag the ShipController object here
+    [Header("Wave results")]
+    [SerializeField] private WaveRewardsComponent waveRewards;
+    [Header("Wave complete (S4) and recommended investment (S5)")]
+    [SerializeField] private WaveCompleteUI waveCompleteUI;
+    [SerializeField] private UpgradeRecommendationUI upgradeUI;
     [Header("lifecycle")]
     [SerializeField, Min(0)] private float incomingSeconds = 3;
     private float incomingRemaining;
     private int waveNumber = 1;
+    private int lastEnergyRewardedWave;
     private bool allComplete;
     private bool ready;
+    // Data of the wave that just ended, kept until the player leaves S4 / S5.
+    private WaveResult completedResult;
+    private bool completedRewardsClaimed;
+    private WaveSnapshot completedSnapshot;
+    private UpgradeOffer pendingOffer;
+    private string pendingReason = "";
     private bool applicationPaused, focusLost, automaticallyPaused;
     public GameState State => states != null ? states.State : GameState.AWAITING_WAVE;
     public int WaveNumber => waveNumber;
@@ -30,17 +44,30 @@ public class GameStateManager : MonoBehaviour
     {
         if (game_data == null) game_data = GetComponent<GameData>();
         if (game_data == null || buildings == null || waveUI == null || waveModel == null ||
-            states == null || services == null || !services.IsConfigured || waveModel.Count == 0)
+            states == null || services == null || !services.IsConfigured || waveModel.Count == 0 ||
+            preparationUI == null || !preparationUI.IsConfigured || waveRewards == null || !waveRewards.IsConfigured)
         {
             Debug.LogError("Assign GameData, Buildings, Wave UI and all three task components; configure the wave list and service Buildings reference.", this);
             enabled = false;
             return;
         }
+        if (waveCompleteUI == null || !waveCompleteUI.IsConfigured || upgradeUI == null || !upgradeUI.IsConfigured)
+        {
+            Debug.LogError("Assign Wave Complete UI (S4) and Upgrade Recommendation UI (S5) and fill in their required references.", this);
+            enabled = false;
+            return;
+        }
+        try { waveRewards.ValidateConfiguration(); }
+        catch (Exception exception) { Debug.LogError("Wave rewards: " + exception.Message, this); enabled = false; return; }
         ready = true;
         states.Changed += ApplyState;
         waveUI.StartWaveRequested += StartWave;
         waveUI.FlowActionRequested += FlowAction;
         buildings.OnChanged += RefreshForecast;
+        buildings.OnChanged += RefreshUpgradeOffer;
+        waveCompleteUI.ContinueRequested += ContinueFromWaveComplete;
+        upgradeUI.UpgradeNowRequested += UpgradeNow;
+        upgradeUI.LaterRequested += FinishUpgrade;
         ApplyState(State);
         RefreshForecast();
     }
@@ -54,6 +81,9 @@ public class GameStateManager : MonoBehaviour
         }
         catch (ArgumentException exception) { Debug.LogError("Wave configuration: " + exception.Message, this); return; }
         buildings.Close();
+        completedResult = null; completedSnapshot = null;
+        completedRewardsClaimed = false;
+        pendingOffer = null; pendingReason = "";
         waveUI.SetCustomerFeedback(null, null);
         incomingRemaining = Mathf.Max(0, incomingSeconds);
         Publish(true);
@@ -87,8 +117,9 @@ public class GameStateManager : MonoBehaviour
                 break;
             case GameState.WAVE_RESOLVING:
                 if (ship != null) ship.Depart(); // SHIP: sail back to the spawn point
-                states.TryEnter(GameState.WAVE_COMPLETE);
-                PrepareNextWave();
+                EvaluateWaveResult();            // Evaluate and award Energy before ClearWave.
+                states.TryEnter(GameState.WAVE_COMPLETE); // S4 stays open until the player presses Continue.
+                if (completedResult == null) ContinueFromWaveComplete(); // nothing to rate -> no S4
                 break;
         }
     }
@@ -98,6 +129,10 @@ public class GameStateManager : MonoBehaviour
         CurrentSnapshot = services.Snapshot();
         waveUI.RenderWave(CurrentSnapshot, rebuild);
         ProgressChanged?.Invoke(CurrentSnapshot);
+
+        // Optional debug: live satisfaction roughly once per 60 frames. Delete after testing.
+        if (waveRewards != null && !rebuild && Time.frameCount % 60 == 0)
+            Debug.Log($"[Wave {CurrentSnapshot.Number}] live satisfaction: {waveRewards.EvaluateLive(CurrentSnapshot):F1}");
     }
 
     private void RefreshForecast()
@@ -105,7 +140,9 @@ public class GameStateManager : MonoBehaviour
         if (!ready || (State != GameState.AWAITING_WAVE && State != GameState.UPGRADE) || allComplete) return;
         try
         {
-            waveUI.RenderWave(services.Forecast(waveModel.Get(waveNumber)), true);
+            var forecast = services.Forecast(waveModel.Get(waveNumber));
+            waveUI.RenderWave(forecast, true);
+            preparationUI.RenderForecast(forecast);
         }
         catch (ArgumentException exception) { Debug.LogError("Wave configuration: " + exception.Message, this); }
     }
@@ -116,7 +153,9 @@ public class GameStateManager : MonoBehaviour
         bool canUpgrade = state == GameState.AWAITING_WAVE || state == GameState.UPGRADE;
         buildings.SetWaveActive(!canUpgrade);
         waveUI.ApplyGameState(state, waveNumber, allComplete);
+        preparationUI.ApplyState(state, allComplete);
         if (ship != null) ship.SetPaused(state == GameState.WAVE_PAUSED); // SHIP: freeze ship while paused
+        RenderResultScreens(state);
         StateChanged?.Invoke(state);
     }
 
@@ -131,16 +170,90 @@ public class GameStateManager : MonoBehaviour
         automaticallyPaused = false;
         states.Resume();
     }
-    private void PrepareNextWave()
+    // S4 -> S5. Coins and Reputation are credited only when Claim Rewards is pressed.
+    private void ContinueFromWaveComplete()
     {
-        // Completion and upgrade are internal lifecycle steps, not player confirmations.
-        if (!states.TryEnter(GameState.UPGRADE)) return;
+        if (!ready || State != GameState.WAVE_COMPLETE) return;
+        if (completedResult != null)
+        {
+            if (completedRewardsClaimed) return;
+            // Mark before wallet callbacks: repeated/reentrant clicks cannot pay twice.
+            completedRewardsClaimed = true;
+            buildings.AddRewards(completedResult.Coins, 0, completedResult.Reputation, 0);
+        }
         allComplete = waveNumber >= waveModel.Count;
         if (!allComplete) waveNumber++;
+
+        pendingOffer = null; pendingReason = "";
+        if (!allComplete &&
+            UpgradeRecommender.TryRecommend(buildings, completedSnapshot, waveRewards.EvaluateNeed, out var offer, out var reason))
+        {
+            pendingOffer = offer; pendingReason = reason;
+        }
+
         services.ClearWave();
+        if (!states.TryEnter(GameState.UPGRADE)) return;
+        // After the last wave, or when everything is maxed, there is nothing to recommend.
+        if (pendingOffer == null) FinishUpgrade();
+    }
+
+    // S5 -> next wave. Reached by "Later" and after a successful "Upgrade Now".
+    private void FinishUpgrade()
+    {
+        if (!ready || State != GameState.UPGRADE) return;
+        pendingOffer = null; pendingReason = "";
         states.TryEnter(GameState.AWAITING_WAVE);
         RefreshForecast();
     }
+
+    private void UpgradeNow()
+    {
+        if (!ready || State != GameState.UPGRADE || pendingOffer == null) return;
+        var offer = pendingOffer;
+        pendingOffer = null; // OnChanged fires inside TryUpgrade; S5 must not re-render with the next level.
+        if (buildings.TryUpgrade(offer.Building)) { FinishUpgrade(); return; }
+        pendingOffer = offer;
+        RefreshUpgradeOffer(); // not affordable (anymore): update the panel instead of closing it
+    }
+
+    // Keeps S5 live while it is open (Coins / Materials changed).
+    private void RefreshUpgradeOffer()
+    {
+        if (!ready || State != GameState.UPGRADE || pendingOffer == null) return;
+        if (!buildings.TryGetUpgradeOffer(pendingOffer.Building, out var fresh)) return;
+        pendingOffer = fresh;
+        upgradeUI.Show(fresh, pendingReason);
+    }
+
+    private void RenderResultScreens(GameState state)
+    {
+        if (state == GameState.WAVE_COMPLETE && completedResult != null) waveCompleteUI.Show(completedResult);
+        else waveCompleteUI.Hide();
+
+        if (state == GameState.UPGRADE && pendingOffer != null) upgradeUI.Show(pendingOffer, pendingReason);
+        else upgradeUI.Hide();
+    }
+
+    // Final wave evaluation. Must run before ContinueFromWaveComplete(), which clears the wave.
+    private void EvaluateWaveResult()
+    {
+        completedResult = null; completedSnapshot = null;
+        if (waveRewards == null) return;
+        var snapshot = services.Snapshot();
+        // A wave with no available services has no customers to rate.
+        if (snapshot == null || !snapshot.IsComplete || snapshot.Total == 0) return;
+        try
+        {
+            var result = waveRewards.Prepare(snapshot);
+            completedResult = result;       // shown on S4
+            completedSnapshot = snapshot;   // used by the S5 recommendation
+            if (lastEnergyRewardedWave == result.WaveNumber) return;
+            lastEnergyRewardedWave = result.WaveNumber;
+            buildings.AddEnergy(result.Energy);
+        }
+        catch (Exception exception) { Debug.LogError("Wave result: " + exception.Message, this); }
+    }
+
     private void FlowAction()
     {
         switch (State)
@@ -180,6 +293,8 @@ public class GameStateManager : MonoBehaviour
     {
         if (states != null) states.Changed -= ApplyState;
         if (waveUI != null) { waveUI.StartWaveRequested -= StartWave; waveUI.FlowActionRequested -= FlowAction; }
-        if (buildings != null) buildings.OnChanged -= RefreshForecast;
+        if (buildings != null) { buildings.OnChanged -= RefreshForecast; buildings.OnChanged -= RefreshUpgradeOffer; }
+        if (waveCompleteUI != null) waveCompleteUI.ContinueRequested -= ContinueFromWaveComplete;
+        if (upgradeUI != null) { upgradeUI.UpgradeNowRequested -= UpgradeNow; upgradeUI.LaterRequested -= FinishUpgrade; }
     }
 }

@@ -39,6 +39,14 @@ public sealed class WaveServices
         ServiceQueue.Positive(multiplier);
         if (services.TryGetValue(need, out var service)) service.SpeedMultiplier = multiplier;
     }
+    public bool TryGetRates(NeedType need, out double fillRate, out double arrivalRate)
+    {
+        fillRate = arrivalRate = 0;
+        if (!services.TryGetValue(need, out var service)) return false;
+        fillRate = service.FillRate;
+        arrivalRate = service.ArrivalRate;
+        return true;
+    }
     public WaveSnapshot Snapshot()
     {
         var needs = new List<NeedSnapshot>();
