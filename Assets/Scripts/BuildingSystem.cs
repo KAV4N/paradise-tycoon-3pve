@@ -217,6 +217,7 @@ public partial class BuildingSystem : MonoBehaviour
 
         action.onClick.AddListener(Confirm);
         closeButton.onClick.AddListener(Close);
+        InitBoostUI();
 
         // Only a fresh game gets the starting roster. A loaded game already has its Workers.
         if (TotalWorkers == 0)
@@ -642,11 +643,20 @@ public partial class BuildingSystem : MonoBehaviour
     // false in AWAITING_WAVE, WAVE_COMPLETE and UPGRADE.
     public void SetWaveActive(bool active)
     {
+        bool wasActive = waveActive;
         waveActive = active;
 
-        // Upgrade and unlock are not offered during a wave, so a panel that is open closes.
+        // During a wave the panel stays open (Boost only). Unlock / Spa views have no Boost, so they close.
+        // When the wave ends the panel closes so it never overlaps the result screens.
         if (active)
+        {
+            if (selected != null && (areaView || selected.IsSpa))
+                Close();
+        }
+        else if (wasActive)
+        {
             Close();
+        }
 
         Refresh();
     }
@@ -686,13 +696,21 @@ public partial class BuildingSystem : MonoBehaviour
         if (b == null)
             return;
 
-        // During a wave a tap on a built building leads to Worker Allocation (S3), never to an upgrade.
-        // A construction site does nothing during a wave.
+        // During a wave a tap on a built building opens the panel in Boost mode (no Upgrade, no Close).
+        // A construction site or the Spa does nothing during a wave.
         if (waveActive)
         {
-            if (b.unlocked && !b.IsSpa)
-                OnWorkerAllocationRequested?.Invoke(b);
+            if (!b.unlocked || b.IsSpa)
+                return;
 
+            if (overlay == null)
+                BuildUI();
+
+            selected = b;
+            areaView = false;
+
+            overlay.SetActive(true);
+            Refresh();
             return;
         }
 
@@ -718,7 +736,7 @@ public partial class BuildingSystem : MonoBehaviour
     {
         RefreshHud();
 
-        if (waveActive && selected != null)
+        if (waveActive && selected != null && (areaView || selected.IsSpa))
             Close();
 
         if (selected != null)
@@ -735,9 +753,10 @@ public partial class BuildingSystem : MonoBehaviour
         heading.text = b.displayName + (areaView ? " - Area Unlock" : "");
 
         balances.text =
-            $"Coins {coins}    Materials {materials}    {ResortValueSystem.ReputationBalanceText(reputation)}    {resortValueSystem.BalanceText(resortValue)}";
+            $"Coins {coins}    Materials {materials}    {ResortValueSystem.ReputationBalanceText(reputation)}    {resortValueSystem.BalanceText(resortValue)}    Energy {energy}";
 
         action.gameObject.SetActive(!waveActive && !(areaView && b.unlocked));
+        closeButton.gameObject.SetActive(!waveActive || !hasBackdropClose);
 
         if (areaView)
         {
@@ -822,6 +841,13 @@ public partial class BuildingSystem : MonoBehaviour
                         ? $"Missing: {Mathf.Max(0, cost - coins)} Coins / {Mathf.Max(0, mats - materials)} Materials"
                         : "Ready to upgrade";
 
+            // During a wave the upgrade texts are replaced by the Boost info.
+            if (waveActive)
+            {
+                price.text = "";
+                status.text = BoostStatusText(b);
+            }
+
             action.gameObject.SetActive(next && !waveActive);
 
             action.interactable =
@@ -833,6 +859,8 @@ public partial class BuildingSystem : MonoBehaviour
             // Previous Upgrade Now (don't change this)
             actionLabel.text = "";
         }
+
+        RefreshBoostUI(b);
     }
 
     public bool TryUpgrade(Building b)
