@@ -118,10 +118,10 @@ TextureImporter:
       name: valueablesFrame_0
       rect:
         serializedVersion: 2
-        x: 5
-        y: 8
-        width: 4600
-        height: 635
+        x: 0
+        y: 36
+        width: 3584
+        height: 1148
       alignment: 0
       pivot: {x: 0, y: 0}
       border: {x: 0, y: 0, z: 0, w: 0}
