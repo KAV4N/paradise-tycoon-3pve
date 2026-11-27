@@ -60,6 +60,8 @@ public class GameStateManager : MonoBehaviour
         try { waveRewards.ValidateConfiguration(); }
         catch (Exception exception) { Debug.LogError("Wave rewards: " + exception.Message, this); enabled = false; return; }
         ready = true;
+        buildings.BindBoostSource(services);
+        buildings.BoostRequested += OnBoostRequested;
         states.Changed += ApplyState;
         waveUI.StartWaveRequested += StartWave;
         waveUI.FlowActionRequested += FlowAction;
@@ -152,6 +154,7 @@ public class GameStateManager : MonoBehaviour
         game_data.SetState(state);
         bool canUpgrade = state == GameState.AWAITING_WAVE || state == GameState.UPGRADE;
         buildings.SetWaveActive(!canUpgrade);
+        buildings.SetBoostAllowed(state == GameState.WAVE_ACTIVE);
         waveUI.ApplyGameState(state, waveNumber, allComplete);
         preparationUI.ApplyState(state, allComplete);
         if (ship != null) ship.SetPaused(state == GameState.WAVE_PAUSED); // SHIP: freeze ship while paused
@@ -263,6 +266,13 @@ public class GameStateManager : MonoBehaviour
             case GameState.WAVE_PAUSED: ResumeWave(); break;
         }
     }
+    // Energy boost pressed in the building panel. Only while guests are being served (not paused / incoming).
+    private void OnBoostRequested(BuildingSystem.Building building)
+    {
+        if (!ready || building == null || State != GameState.WAVE_ACTIVE) return;
+        services.TryActivateBoost(building.needType);
+    }
+
     // Integration point for future Worker/boost tasks; active work is never reset.
     public void SetServiceSpeed(NeedType need, double multiplier) { services?.SetSpeedMultiplier(need, multiplier); }
 
@@ -293,7 +303,7 @@ public class GameStateManager : MonoBehaviour
     {
         if (states != null) states.Changed -= ApplyState;
         if (waveUI != null) { waveUI.StartWaveRequested -= StartWave; waveUI.FlowActionRequested -= FlowAction; }
-        if (buildings != null) { buildings.OnChanged -= RefreshForecast; buildings.OnChanged -= RefreshUpgradeOffer; }
+        if (buildings != null) { buildings.OnChanged -= RefreshForecast; buildings.OnChanged -= RefreshUpgradeOffer; buildings.BoostRequested -= OnBoostRequested; }
         if (waveCompleteUI != null) waveCompleteUI.ContinueRequested -= ContinueFromWaveComplete;
         if (upgradeUI != null) { upgradeUI.UpgradeNowRequested -= UpgradeNow; upgradeUI.LaterRequested -= FinishUpgrade; }
     }
